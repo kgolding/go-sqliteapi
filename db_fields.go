@@ -12,12 +12,7 @@ type TableFieldMetaData struct {
 	WriteProtected bool `json:"writeprotected,omitempty"`
 
 	// User interface
-	Label     string `json:"label,omitempty"`
 	LookupUri string `json:"lookupUri,omitempty"`
-	// LookupTable  string `json:"lookuptable,omitempty"`
-	// LookupKey    string `json:"lookupkey,omitempty"`
-	// LookupFields string `json:"lookupfields,omitempty"`
-	// LookupOrder  string `json:"lookuporder,omitempty"`
 
 	// Validation
 	MinLen     int            `json:"minlen,omitempty"`
