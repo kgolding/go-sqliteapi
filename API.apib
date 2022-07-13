@@ -1,0 +1,200 @@
+FORMAT: 1A
+
+# Go-SQLAPI Database API
+
+# Group Database
+
+## Database [/api]
+
+### List collections [GET]
+
++ Response 200 (application/json)
+
+        ```
+        [
+          "tablename",
+          "viewname"
+        ]
+        ```
+
+### Run raw SQL query [POST]
+
++ Request (text/plain)
+
+        ```
+        SELECT id, name FROM table
+        ```
++ Response 200 (application/json)
+
+        ```
+        [
+          {
+            "id": 1,
+            "name": "Hello world!"
+          }
+        ]
+        ```
+
++ Response 400 (text/plain)
+
+        ```
+        no such table: notatable
+        ```
+
+# Group Collections
+
+## Collection information [/api/{collection_name}?info]
+
+### Get collection information [GET]
+
++ Parameters
+  + collection_name (string) - collection name
+
++ Response 200 (application/json)
+
+        ```
+        [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "pk": 1,
+            "writeprotected": true
+          },
+          {
+            "name": "createdAt",
+            "type": "DATETIME",
+            "notnull": true,
+            "default": "CURRENT_TIMESTAMP",
+            "writeprotected": true
+          },
+          {
+            "name": "name",
+            "type": "TEXT",
+            "notnull": true
+          },
+          {
+            "name": "login",
+            "type": "TEXT",
+            "notnull": true,
+            "minlen": 3,
+            "regexp": "^[a-z][a-z0-9]+$",
+            "regexphint": "must start with a letter followed by letters/number only"
+          },
+        ]
+        ```
+
++ Response 400 (text/plain)
+
+        ```
+        invalid table name 'notatable`
+        ```
+
+## Collection items [/api/{collection_name}{?select,sort,where,limit,offset}]
+
+### Get collection items [GET]
+
++ Parameters
+    + collection_name (string) - Collection name
+    + select (string, optional) - Comma seperated list of fields
+        + Default: '*'
+    + sort (string, optional) - SQL ORDER BY clause
+    + where (string, optional) - SQL where clause (must be url encoded so the `%` becomes `%25`)
+    + limit (number, optional) -  Limit max items to return
+        + Default: 1000
+    + offset (number,optional) - Offset/skip items returned
+        + Default: 0
+
++ Response 200 (application/json)
+
+        ```
+        [
+          {
+            "id": 1,
+            "name": "Hello world!"
+          }
+        ]
+        ```
+
++ Response 400 (text/plain)
+
+        ```
+        invalid table name 'notatable`
+        ```
+        
+
+### Create collection item [POST]
+
+Unknown & write protected fields will be ignored.
+
++ Request (application/json)
+
+        ```
+          {
+          "name": "Hello world!"
+        }
+        ```
+
++ Response 200 (text/plain)
+
+    ```
+    3
+    ```
+
++ Response 400 (text/plain)
+
+    ```
+    no values to store
+    ```
+    
++ Response 400 (text/plain)
+
+    ```
+    NOT NULL constraint failed: table.field
+    ```
++ Response 400 (text/plain)
+
+    ```
+    name: too short, must be at least 3 chars
+    ```
+
+## Collection item [/api/{collection_name}/{id}]
+
++ Parameters
+    + collection_name (string) - Collection name
+    + id (number) - Item ID
+
+
+### Update collection item [PUT]
+
+Unknown & write protected fields will be ignored.
+
+Only the given fields will be updated, other fields will retain their current values.
+
++ Request (application/json)
+
++ Response 200
+
++ Response 400 (text/plain)
+
+        ```
+        * `invalid row ID`
+        * `no values to store`
+        * `NOT NULL constraint failed: table.field`
+        * `cdsid: too short, must be at least 3 chars`
+        ```
+
+## Delete collection item [DELETE]
+
++ Response 200
+
++ Response 400 (text/plain)
+
+        ```
+        invalid row ID
+        ```
+
++ Response 404
+
+
+
+

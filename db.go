@@ -114,79 +114,78 @@ func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {
 	}
 
 	selectArray, err := d.SanitiseSelectByTable(r.URL.Query().Get("select"), table)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	where := r.URL.Query().Get("where")
 	sort := r.URL.Query().Get("sort")
-	offset := 0
-	limit := -1
 
-	if v := r.URL.Query().Get("offset"); v != "" {
-		n, _ := strconv.Atoi(v)
-		if n > 0 {
-			offset = n
-		}
+	offset, limit, err := d.GetLimitOffset(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
-	if v := r.URL.Query().Get("limit"); v != "" {
-		n, _ := strconv.Atoi(v)
-		if n > 0 {
-			limit = n
-		}
-	}
-
-	log.WithFields(log.Fields{
-		"Table":  table,
-		"Select": selectArray,
-		"Where":  where,
-		"Offset": offset,
-		"Limit":  limit,
-	}).Infof("GetRows")
-
-	sql := "SELECT " + strings.Join(selectArray, ",") + " FROM " + table
+	q := "SELECT " + strings.Join(selectArray, ",") + " FROM " + table
 	if where != "" {
-		sql += " WHERE " + where
+		q += " WHERE " + where
 	}
 	if sort != "" {
-		sql += " ORDER BY " + sort
+		q += " ORDER BY " + sort
 	}
-	sql += fmt.Sprintf(" LIMIT %d, %d", offset, limit)
+	q += fmt.Sprintf(" LIMIT %d, %d", offset, limit)
 
+	log.WithFields(log.Fields{
+		"sql": q,
+	}).Infof("GetRows")
+
+	// Change this to use Content-Type
 	switch strings.ToLower(r.URL.Query().Get("format")) {
 	case "csv":
 		if fname := r.URL.Query().Get("filename"); fname != "" {
 			w.Header().Set("Content-Disposition", `attachment; filename="`+fname+`"`)
 		}
 		w.Header().Set("Content-Type", "text/csv")
-		err = d.QueryCsvWriter(w, sql)
+		err = d.QueryCsvWriter(w, q)
+
 	default:
 		w.Header().Set("Content-Type", "application/json")
-		err = d.QueryJsonWriter(w, sql)
+		err = d.QueryJsonWriter(w, q)
 	}
+
 	if err != nil {
-		log.WithField("SQL", sql).Error(err)
+		log.WithField("SQL", q).Error(err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 }
 
-func (d *Database) GetLimitOffset(r *http.Request) (offset, limit int) {
-	offset = 0
-	limit = -1
+func (d *Database) GetLimitOffset(r *http.Request) (int, int, error) {
+	offset := 0
+	limit := 1000
 
 	if v := r.URL.Query().Get("offset"); v != "" {
-		n, _ := strconv.Atoi(v)
-		if n > 0 {
-			offset = n
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return offset, limit, err
+		}
+		if n < 0 {
+			return offset, limit, errors.New("invalid offset")
 		}
 	}
 
 	if v := r.URL.Query().Get("limit"); v != "" {
-		n, _ := strconv.Atoi(v)
-		if n > 0 {
-			limit = n
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return offset, limit, err
+		}
+		if n < 0 {
+			return offset, limit, errors.New("invalid offset")
 		}
 	}
-	return offset, limit
+	return offset, limit, nil
 }
 
 func (d *Database) PostTable(w http.ResponseWriter, r *http.Request) {
