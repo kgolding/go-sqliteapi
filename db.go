@@ -313,35 +313,6 @@ func (d *Database) Close() {
 	d.DB.Close()
 }
 
-// type TableField struct {
-// 	CID          int
-// 	Name         string
-// 	Type         string
-// 	NotNull      bool
-// 	DefaultValue interface{}
-// 	PrimaryKey   bool
-// }
-
-// func (d *Database) TableInfo(table string) (map[string]TableField, error) {
-// 	rows, err := d.DB.Query("PRAGMA TABLE_INFO(`" + table + "`);")
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	tableFields := make(map[string]TableField)
-// 	for rows.Next() {
-// 		tf := TableField{}
-// 		err = rows.Scan(&tf.CID, &tf.Name, &tf.Type, &tf.NotNull, &tf.DefaultValue, &tf.PrimaryKey)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		tableFields[tf.Name] = tf
-// 	}
-// 	if len(tableFields) == 0 {
-// 		return nil, errors.New("Unknown table or no fields")
-// 	}
-// 	return tableFields, nil
-// }
-
 func (d *Database) SanitiseSelectByTable(selectStr string, table string) ([]string, error) {
 	invalidFields := []string{}
 	selectArray := []string{}

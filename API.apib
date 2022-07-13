@@ -8,6 +8,8 @@ FORMAT: 1A
 
 ### List collections [GET]
 
+Collections can be SQLite tables or views.
+
 + Response 200 (application/json)
 
         ```
@@ -19,11 +21,18 @@ FORMAT: 1A
 
 ### Run raw SQL query [POST]
 
+**WARNING** This endpoint ignores all security allowing access to hidden fields.
+
+**NOT RECOMMENDED FOR PRODUCTION**
+
+Limited to queries (i.e. SELECT) only.
+
 + Request (text/plain)
 
         ```
         SELECT id, name FROM table
         ```
+
 + Response 200 (application/json)
 
         ```
@@ -46,6 +55,8 @@ FORMAT: 1A
 ## Collection information [/api/{collection_name}?info]
 
 ### Get collection information [GET]
+
+Returns an array of collection fields/columns for use building dynamic forms.
 
 + Parameters
   + collection_name (string) - collection name
@@ -77,6 +88,7 @@ FORMAT: 1A
             "type": "TEXT",
             "notnull": true,
             "minlen": 3,
+            "maxlen": 3,
             "regexp": "^[a-z][a-z0-9]+$",
             "regexphint": "must start with a letter followed by letters/number only"
           },
@@ -90,6 +102,12 @@ FORMAT: 1A
         ```
 
 ## Collection items [/api/{collection_name}{?select,sort,where,limit,offset}]
+
+When posting/putting data, errors may be returned, for example:
+
+* `no values to store`
+* `NOT NULL constraint failed: table.field`
+* `name: too short, must be at least 3 chars`
 
 ### Get collection items [GET]
 
@@ -141,22 +159,11 @@ Unknown & write protected fields will be ignored.
     ```
 
 + Response 400 (text/plain)
-
+    
     ```
     no values to store
     ```
     
-+ Response 400 (text/plain)
-
-    ```
-    NOT NULL constraint failed: table.field
-    ```
-+ Response 400 (text/plain)
-
-    ```
-    name: too short, must be at least 3 chars
-    ```
-
 ## Collection item [/api/{collection_name}/{id}]
 
 + Parameters
@@ -175,13 +182,10 @@ Only the given fields will be updated, other fields will retain their current va
 + Response 200
 
 + Response 400 (text/plain)
-
-        ```
-        * `invalid row ID`
-        * `no values to store`
-        * `NOT NULL constraint failed: table.field`
-        * `cdsid: too short, must be at least 3 chars`
-        ```
+    
+    ```
+    invalid row ID
+    ```
 
 ## Delete collection item [DELETE]
 
@@ -194,7 +198,3 @@ Only the given fields will be updated, other fields will retain their current va
         ```
 
 + Response 404
-
-
-
-
