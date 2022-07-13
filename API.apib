@@ -84,6 +84,12 @@ Returns an array of collection fields/columns for use building dynamic forms.
             "notnull": true
           },
           {
+            "name": "color",
+            "type": "TEXT",
+            "notnull": true,
+            "lookupUri": "/api/color?select=name&sort=name"
+          },
+          {
             "name": "login",
             "type": "TEXT",
             "notnull": true,
