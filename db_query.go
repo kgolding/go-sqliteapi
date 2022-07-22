@@ -8,52 +8,43 @@ import (
 	"io"
 )
 
-// queryToMap runs the query and returns an array of rows
-// func (d *Database) queryToMap(query string, args ...interface{}) ([]map[string]interface{}, error) {
-// 	// an array of JSON objects
-// 	// the map key is the field name
-// 	var objects []map[string]interface{}
+func (d *Database) QueryJsonArrayWriter(w io.Writer, query string, args ...interface{}) error {
+	tx, err := d.DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() // This is a query so we always rollback
 
-// 	rows, err := d.DB.Query(query, args...)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	defer rows.Close()
+	rows, err := tx.Queryx(query, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
 
-// 	for rows.Next() {
-// 		// figure out what columns were returned
-// 		// the column names will be the JSON object field keys
-// 		columns, err := rows.ColumnTypes()
-// 		if err != nil {
-// 			return nil, err
-// 		}
+	w.Write([]byte("["))
+	addComma := false // we prefix with a comma when it's not the first row
 
-// 		// Scan needs an array of pointers to the values it is setting
-// 		// This creates the object and sets the values correctly
-// 		values := make([]interface{}, len(columns))
-// 		object := map[string]interface{}{}
-// 		for i, column := range columns {
-// 			v := new(interface{})
-// 			scanType := column.ScanType()
-// 			if scanType != nil { // Deal with null values
-// 				if t := reflect.New(scanType).Interface(); t != nil {
-// 					v = &t
-// 				}
-// 			}
-// 			object[column.Name()] = v
-// 			values[i] = object[column.Name()]
-// 		}
+	for rows.Next() {
+		ret, err := rows.SliceScan()
+		if err != nil {
+			return err
+		}
 
-// 		err = rows.Scan(values...)
-// 		if err != nil {
-// 			return nil, err
-// 		}
+		if addComma {
+			w.Write([]byte(","))
+		} else {
+			addComma = true
+		}
+		b, err := json.Marshal(ret)
+		if err != nil {
+			return err
+		}
+		w.Write(b)
+	}
+	w.Write([]byte("]"))
 
-// 		objects = append(objects, object)
-// 	}
-
-// 	return objects, nil
-// }
+	return nil
+}
 
 // queryJsonWriter runs the query and streams the result as json to the given Writer
 func (d *Database) QueryJsonWriter(w io.Writer, query string, args ...interface{}) error {
@@ -113,13 +104,6 @@ func (d *Database) QueryCsvWriter(w io.Writer, query string, args ...interface{}
 	if err != nil {
 		return err
 	}
-	// for _, f := range d.secretFields {
-	// 	for i, c := range cols {
-	// 		if f == c {
-	// 			cols = append(cols[:i], cols[:i+1]...)
-	// 		}
-	// 	}
-	// }
 
 	csv := csv.NewWriter(w)
 	err = csv.Write(cols)

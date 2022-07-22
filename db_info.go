@@ -1,9 +1,16 @@
 package gdb
 
+import (
+	"fmt"
+	"strings"
+)
+
+type TableInfos map[string]TableInfo
+
 type TableInfo struct {
-	Name   string            `json:"name"`
-	IsView bool              `json:"isView"`
-	Fields []*TableFieldInfo `json:"fields"`
+	Name   string           `json:"name"`
+	IsView bool             `json:"isView"`
+	Fields []TableFieldInfo `json:"fields"`
 }
 
 type TableFieldInfo struct {
@@ -14,12 +21,50 @@ type TableFieldInfo struct {
 	PrimaryKey   int         `json:"pk,omitempty"` // number of prmimary keys
 }
 
-func (d *Database) Refresh() error {
-	info := make(map[string]*TableInfo)
+func (tis TableInfos) GetTableInfo(name string) *TableInfo {
+	for _, tfi := range tis {
+		if tfi.Name == name {
+			return &tfi
+		}
+	}
+	return nil
+}
 
-	rows, err := d.DB.Query(`
+func (tis TableInfos) String() string {
+	s := ""
+	for _, ti := range tis {
+		s += "Table: " + ti.Name + "\n"
+		for _, f := range ti.Fields {
+			s += fmt.Sprintf(" - %s %s", f.Name, f.Type)
+			if f.NotNull {
+				s += " NOT NULL"
+			}
+			if f.PrimaryKey > 0 {
+				s += " PRIMARY KEY"
+			}
+			if f.DefaultValue != nil {
+				s += fmt.Sprintf(" DEFAULT %s", f.DefaultValue)
+			}
+			s += "\n"
+		}
+	}
+
+	return s
+}
+
+// Refresh updates dbInfo
+func (d *Database) Refresh() error {
+
+	tx, err := d.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	info := make(TableInfos)
+	rows, err := tx.Query(`
 		SELECT type, tbl_name FROM sqlite_master
-		WHERE type IN ("table", "view") AND name NOT LIKE "sqlite_%" ORDER BY tbl_name
+		WHERE type IN ("table", "view") AND name NOT LIKE "sqlite_%" AND name NOT LIKE "gdb_%" ORDER BY tbl_name
 	`)
 	if err != nil {
 		return err
@@ -31,12 +76,13 @@ func (d *Database) Refresh() error {
 		if err != nil {
 			return err
 		}
+
 		table := TableInfo{
 			Name:   n,
 			IsView: t == "view",
-			Fields: make([]*TableFieldInfo, 0),
+			Fields: make([]TableFieldInfo, 0),
 		}
-		frows, err := d.DB.Query(`PRAGMA TABLE_INFO("` + n + `")`)
+		frows, err := tx.Query(`PRAGMA TABLE_INFO("` + n + `");`)
 		if err != nil {
 			return err
 		}
@@ -47,10 +93,11 @@ func (d *Database) Refresh() error {
 			if err != nil {
 				return err
 			}
-			table.Fields = append(table.Fields, &f)
+			f.Type = strings.ToLower(f.Type)
+			table.Fields = append(table.Fields, f)
 		}
 
-		info[n] = &table
+		info[n] = table
 	}
 	d.dbInfo = info
 	return nil

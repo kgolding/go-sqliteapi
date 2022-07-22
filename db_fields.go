@@ -5,14 +5,32 @@ import (
 	"regexp"
 )
 
-type TableDotField string
+const (
+	CONTROL_INPUT    = "text" // Default
+	CONTROL_NUMBER   = "number"
+	CONTROL_DATE     = "date"
+	CONTROL_TIME     = "time"
+	CONTROL_DATETIME = "datetime"
+	CONTROL_TEXTAREA = "textarea"
+	CONTROL_CHECKBOX = "checkbox"
+	CONTROL_HTML     = "html"
+	CONTROL_SELECT   = "select" // Requires options and/or LookupUri
+	CONTROL_RADIO    = "radio"  // Requires options and/or LookupUri
+)
+
+type SelectOption struct {
+	Key   interface{} `json:"k"`
+	Value interface{} `json:"v"`
+}
 
 type TableFieldMetaData struct {
 	Hidden         bool `json:"hidden,omitempty"`
 	WriteProtected bool `json:"writeprotected,omitempty"`
 
 	// User interface
-	LookupUri string `json:"lookupUri,omitempty"`
+	Control   string          `json:"control,omitempty"`
+	LookupUri string          `json:"lookupUri,omitempty"`
+	Options   []*SelectOption `json:"options,omitempty"`
 
 	// Validation
 	MinLen     int            `json:"minlen,omitempty"`
@@ -22,7 +40,7 @@ type TableFieldMetaData struct {
 	regexp     *regexp.Regexp `json:"-"`
 }
 
-func (d *Database) CheckTableNameGetFields(table string) ([]*TableFieldInfo, error) {
+func (d *Database) CheckTableNameGetFields(table string) ([]TableFieldInfo, error) {
 	info, ok := d.dbInfo[table]
 	if !ok {
 		return nil, fmt.Errorf("invalid table name '%s'", table)

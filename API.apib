@@ -107,7 +107,7 @@ Returns an array of collection fields/columns for use building dynamic forms.
         invalid table name 'notatable`
         ```
 
-## Collection items [/api/{collection_name}{?select,sort,where,limit,offset}]
+## Collection items [/api/{collection_name}{?select,sort,where,limit,offset,format}]
 
 When posting/putting data, errors may be returned, for example:
 
@@ -127,6 +127,7 @@ When posting/putting data, errors may be returned, for example:
         + Default: 1000
     + offset (number,optional) - Offset/skip items returned
         + Default: 0
+    + format (string,optional) - Content formatting (`csv`, `array`)
 
 + Response 200 (application/json)
 

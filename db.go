@@ -27,7 +27,7 @@ type Database struct {
 	log                 *log.Logger
 	hooks               []Hook
 	tableFieldsMetaData map[string]map[string]*TableFieldMetaData
-	dbInfo              map[string]*TableInfo
+	dbInfo              TableInfos
 	sync.Mutex
 }
 
@@ -37,7 +37,7 @@ func NewDatabase(file string) (*Database, error) {
 		log:                 log.New(),
 		hooks:               make([]Hook, 0),
 		tableFieldsMetaData: make(map[string]map[string]*TableFieldMetaData),
-		dbInfo:              make(map[string]*TableInfo),
+		dbInfo:              make(TableInfos),
 	}
 	d.log.SetLevel(log.DebugLevel)
 	d.DB, err = sqlx.Open("sqlite3", file)
@@ -102,7 +102,7 @@ func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {
 		ret := make([]TableFieldInfoWithMetaData, 0)
 		for _, tf := range tableFields {
 			x := TableFieldInfoWithMetaData{
-				TableFieldInfo: *tf,
+				TableFieldInfo: tf,
 			}
 			x.TableFieldMetaData = *d.GetFieldMetaData(table, tf.Name)
 			ret = append(ret, x)
@@ -150,6 +150,10 @@ func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/csv")
 		err = d.QueryCsvWriter(w, q)
 
+	case "array":
+		w.Header().Set("Content-Type", "application/json")
+		err = d.QueryJsonArrayWriter(w, q)
+
 	default:
 		w.Header().Set("Content-Type", "application/json")
 		err = d.QueryJsonWriter(w, q)
@@ -174,6 +178,7 @@ func (d *Database) GetLimitOffset(r *http.Request) (int, int, error) {
 		if n < 0 {
 			return offset, limit, errors.New("invalid offset")
 		}
+		offset = n
 	}
 
 	if v := r.URL.Query().Get("limit"); v != "" {
@@ -184,6 +189,7 @@ func (d *Database) GetLimitOffset(r *http.Request) (int, int, error) {
 		if n < 0 {
 			return offset, limit, errors.New("invalid offset")
 		}
+		limit = n
 	}
 	return offset, limit, nil
 }
