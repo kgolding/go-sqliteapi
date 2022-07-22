@@ -1,11 +1,23 @@
 package gdb
 
 import (
+	"fmt"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v3"
 )
+
+func InsertTable1Data(d *Database) error {
+	for i := 1; i < 1000; i++ {
+		_, err := d.DB.Exec("INSERT INTO table1 (title) VALUES (?)", fmt.Sprintf("Table1 Title %d", i))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func TestConfigApplyNew(t *testing.T) {
 	db, err := NewDatabase("file::memory:?cache=private")
@@ -14,6 +26,7 @@ func TestConfigApplyNew(t *testing.T) {
 
 	err = db.ApplyConfig(&config1)
 	assert.NoError(t, err)
+	assert.NoError(t, InsertTable1Data(db))
 
 	assert.NoError(t, db.Refresh())
 
@@ -38,6 +51,7 @@ func TestConfigApplyRemoveTable(t *testing.T) {
 
 	err = db.ApplyConfig(&config1)
 	assert.NoError(t, err)
+	assert.NoError(t, InsertTable1Data(db))
 	assert.Len(t, db.dbInfo, 0) // Before refresh
 	assert.NoError(t, db.Refresh())
 	assert.Len(t, db.dbInfo, 2) // After refresh
@@ -60,30 +74,43 @@ func TestConfigApplyRemoveTable(t *testing.T) {
 }
 
 func TestConfigApply1234(t *testing.T) {
-	db, err := NewDatabase("file::memory:?cache=shared")
-	// os.Remove("test.db")
-	// db, err := NewDatabase("test.db")
+	var db *Database
+	var err error
+	if false {
+		db, err = NewDatabase("file::memory:?cache=shared")
+	} else {
+		os.Remove("test.db")
+		db, err = NewDatabase("test.db")
+	}
 	assert.NoError(t, err)
 	defer db.Close()
 
-	println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ Config 1")
 	assert.Len(t, db.dbInfo, 0)
+
+	println(">>>>>>>>>>>>> Config 1")
 	assert.NoError(t, db.ApplyConfig(&config1))
+	assert.NoError(t, InsertTable1Data(db))
 	assert.NoError(t, db.Refresh())
 	assert.Len(t, db.dbInfo, 2)
 
-	println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ Config 2")
+	// Test Foreign key
+	_, err = db.DB.Exec("INSERT INTO table2 (t1Id) VALUES (1)") // Should be ok
+	assert.NoError(t, err)
+	_, err = db.DB.Exec("INSERT INTO table2 (t1Id) VALUES (9999999)") // Should fail
+	assert.Error(t, err)
+
+	println(">>>>>>>>>>>>> Config 2")
 	assert.NoError(t, db.ApplyConfig(&config2))
 	assert.NoError(t, db.Refresh())
 	assert.Len(t, db.dbInfo, 1)
 
-	println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ Config 3")
+	println(">>>>>>>>>>>>> Config 3")
 	assert.NoError(t, db.ApplyConfig(&config3))
 	assert.NoError(t, db.Refresh())
 	assert.Len(t, db.dbInfo, 1)
 	assert.Len(t, db.dbInfo[config3.Tables[0].Name].Fields, 4)
 
-	println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ Config 4")
+	println(">>>>>>>>>>>>> Config 4")
 	assert.True(t, config4.Tables[0].Fields[2].NotNull)
 	assert.NoError(t, db.ApplyConfig(&config4))
 	assert.NoError(t, db.Refresh())

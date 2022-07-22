@@ -5,19 +5,6 @@ import (
 	"strings"
 )
 
-/*
-
-tables:
-- name: table1
-  fields:
-    - name: id
-    - name: createdAt
-    - name: title
-      type: text
-      label: Title
-
-*/
-
 var SpecialFields = map[string]TableFieldInfo{
 	"id": {
 		Name:       "id",
@@ -65,7 +52,11 @@ type Field struct {
 
 	// User interface
 	Control string `yaml:"control,omitempty" json:"control,omitempty"`
-	// LookupUri string          `json:"lookupUri,omitempty"`
+	// Lookup  struct {
+	// 	Table   string `yaml:"table"`
+	// 	Field   string `yaml:"field"`
+	// 	Display string `yaml:"display"` // e.g. "title"
+	// } `json:"lookup,omitempty"`
 	// Options   []*SelectOption `json:"options,omitempty"`
 
 	// Validation

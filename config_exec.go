@@ -1,6 +1,7 @@
 package gdb
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"strings"
 	"time"
@@ -11,46 +12,62 @@ import (
 const ConfigCreateSql = `CREATE TABLE IF NOT EXISTS "gdb_config" (
 	"id"			INTEGER	PRIMARY KEY AUTOINCREMENT,
 	"createdAt"	DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-	"config"	TEXT NOT NULL);`
+	"config"		TEXT NOT NULL,
+	"hash"		TEXT NOT NULL
+	);`
 
 type GdbConfigRow struct {
 	ID        int       `db:"id"`
 	CreatedAt time.Time `db:"createdAt"`
 	Config    []byte    `db:"config"`
+	Hash      []byte    `sb:"hash`
 }
 
 func debugf(format string, args ...interface{}) {
 	// fmt.Printf(format, args...)
 }
 
-func (d *Database) ApplyConfig(c *Config) error {
+func (d *Database) ApplyConfig(c *Config) (err error) {
 	debugf("================ APPLY START ===================\n%+v\n", c)
 	defer debugf("================ APPLY END ===================\n")
 
-	err := d.Refresh()
+	err = d.Refresh()
 	if err != nil {
-		return err
+		return
 	}
 
 	debugf("dbInfo: %+v\n", d.dbInfo)
 
-	_, err = d.DB.Exec("PRAGMA foreign_keys=OFF")
-	if err != nil {
-		return fmt.Errorf("foreign_keys=OFF: %w", err)
-	}
-
-	defer d.DB.Exec("PRAGMA foreign_keys=ON")
-
 	tx, err := d.DB.Beginx()
 	if err != nil {
-		return err
+		return
 	}
+
+	_, err = tx.Exec("PRAGMA foreign_keys=OFF")
+	if err != nil {
+		err = fmt.Errorf("foreign_keys=OFF: %w", err)
+		return
+	}
+
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+			return
+		} else {
+			_, err = tx.Exec("PRAGMA foreign_keys=ON")
+			if err != nil {
+				tx.Rollback()
+				return
+			}
+		}
+		err = tx.Commit()
+	}()
 
 	// Make sure the config table exists
 	_, err = tx.Exec(ConfigCreateSql)
 	if err != nil {
-		tx.Rollback()
-		return fmt.Errorf("error creating config table: %w", err)
+		err = fmt.Errorf("error creating config table: %w", err)
+		return
 	}
 
 	// Remove tables
@@ -59,29 +76,29 @@ func (d *Database) ApplyConfig(c *Config) error {
 			debugf("APPLY: DROP table %s\n", oldTable.Name)
 			_, err = tx.Exec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`", oldTable.Name))
 			if err != nil {
-				tx.Rollback()
-				return fmt.Errorf("error dropping table '%s': %w", oldTable.Name, err)
+				err = fmt.Errorf("error dropping table '%s': %w", oldTable.Name, err)
+				return
 			}
 			delete(d.dbInfo, oldTable.Name)
 		}
 	}
 
+	var sql string
 	// Add/modify tables
 	for _, table := range c.Tables {
 		ot := d.dbInfo.GetTableInfo(table.Name)
 
 		if ot == nil { // CREATE TABLE
 			debugf("APPLY: CREATE table %s\n", table.Name)
-			sql, err := table.CreateSQL()
+			sql, err = table.CreateSQL()
 			if err != nil {
-				tx.Rollback()
-				return err
+				return
 			}
 			debugf("APPLY: %s", sql)
 			_, err = tx.Exec(sql)
 			if err != nil {
-				tx.Rollback()
-				return fmt.Errorf("error creating table '%s': %w\n%s", table.Name, err, sql)
+				err = fmt.Errorf("error creating table '%s': %w\n%s", table.Name, err, sql)
+				return
 			}
 
 		} else { // MODIFY TABLE
@@ -126,9 +143,10 @@ func (d *Database) ApplyConfig(c *Config) error {
 					}
 
 					if justAdd {
+						var coldef string
 						debugf("APPLY: MODIFY table %s: Just add\n", table.Name)
 						for _, f := range table.Fields[len(ot.Fields):] {
-							coldef, err := f.ColDef()
+							coldef, err = f.ColDef()
 							if err != nil {
 								tx.Rollback()
 								return fmt.Errorf("bad field definition '%s' to '%s': %w", f.Name, table.Name, err)
@@ -137,8 +155,8 @@ func (d *Database) ApplyConfig(c *Config) error {
 							// fmt.Println(sql)
 							_, err = tx.Exec(sql)
 							if err != nil {
-								tx.Rollback()
-								return fmt.Errorf("error adding column '%s' to '%s': %w", f.Name, table.Name, err)
+								err = fmt.Errorf("error adding column '%s' to '%s': %w", f.Name, table.Name, err)
+								return
 							}
 						}
 						bigChange = false
@@ -154,17 +172,16 @@ func (d *Database) ApplyConfig(c *Config) error {
 					tableName := table.Name
 					debugf("APPLY: CREATE table %s\n", tmpName)
 					table.Name = tmpName // Temp change name
-					sql, err := table.CreateSQL()
+					sql, err = table.CreateSQL()
 					table.Name = tableName // Change name back
 					if err != nil {
-						tx.Rollback()
-						return err
+						return
 					}
 					debugf("APPLY: %s", sql)
 					_, err = tx.Exec(sql)
 					if err != nil {
-						tx.Rollback()
-						return fmt.Errorf("error creating temporary table '%s': %w\n%s", tmpName, err, sql)
+						err = fmt.Errorf("error creating temporary table '%s': %w\n%s", tmpName, err, sql)
+						return
 					}
 
 					// 2. Copy data
@@ -183,8 +200,8 @@ func (d *Database) ApplyConfig(c *Config) error {
 						debugf("APPLY: %s", sql)
 						_, err = tx.Exec(sql)
 						if err != nil {
-							tx.Rollback()
-							return fmt.Errorf("error copying data from '%s' to '%s': %w\n%s", ot.Name, tmpName, err, sql)
+							err = fmt.Errorf("error copying data from '%s' to '%s': %w\n%s", ot.Name, tmpName, err, sql)
+							return
 						}
 					}
 
@@ -193,8 +210,8 @@ func (d *Database) ApplyConfig(c *Config) error {
 					debugf("APPLY: %s", sql)
 					_, err = tx.Exec(sql)
 					if err != nil {
-						tx.Rollback()
-						return fmt.Errorf("error dropping old table '%s': %w\n%s", ot.Name, err, sql)
+						err = fmt.Errorf("error dropping old table '%s': %w\n%s", ot.Name, err, sql)
+						return
 					}
 
 					// 4. Rename tmp
@@ -202,8 +219,8 @@ func (d *Database) ApplyConfig(c *Config) error {
 					debugf("APPLY: %s", sql)
 					_, err = tx.Exec(sql)
 					if err != nil {
-						tx.Rollback()
-						return fmt.Errorf("error renaming table '%s' to '%s': %w\n%s", tmpName, tableName, err, sql)
+						err = fmt.Errorf("error renaming table '%s' to '%s': %w\n%s", tmpName, tableName, err, sql)
+						return
 					}
 				}
 			}
@@ -212,16 +229,16 @@ func (d *Database) ApplyConfig(c *Config) error {
 
 	b, err := yaml.Marshal(c)
 	if err != nil {
-		tx.Rollback()
-		return err
+		return
 	}
 
-	_, err = tx.Exec("INSERT INTO gdb_config (config) VALUES (?)", b)
+	h := sha256.New()
+	h.Write(b)
+
+	_, err = tx.Exec("INSERT INTO gdb_config (config, hash) VALUES (?, ?)", b, h.Sum(nil))
 	if err != nil {
-		tx.Rollback()
-		return err
+		return
 	}
 
-	err = tx.Commit()
-	return err
+	return
 }

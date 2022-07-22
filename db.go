@@ -45,6 +45,8 @@ func NewDatabase(file string) (*Database, error) {
 		return nil, err
 	}
 
+	d.DB.Exec("PRAGMA foreign_keys=ON")
+
 	d.Refresh()
 
 	return d, nil
