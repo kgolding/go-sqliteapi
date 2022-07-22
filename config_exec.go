@@ -23,7 +23,7 @@ func debugf(format string, args ...interface{}) {
 	// fmt.Printf(format, args...)
 }
 
-func (c *Config) Apply(d *Database) error {
+func (d *Database) ApplyConfig(c *Config) error {
 	debugf("================ APPLY START ===================\n%+v\n", c)
 	defer debugf("================ APPLY END ===================\n")
 

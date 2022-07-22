@@ -50,6 +50,16 @@ func NewDatabase(file string) (*Database, error) {
 	return d, nil
 }
 
+// @TODO
+// func (d *Database) Backup(destination string) error {
+// 	sql
+// 	if !ok {
+// 		return errors.New("Not a sqlite3 database")
+// 	}
+
+// 	return nil
+// }
+
 func (d *Database) GetObjects(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 

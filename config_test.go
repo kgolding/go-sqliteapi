@@ -12,7 +12,7 @@ func TestConfigApplyNew(t *testing.T) {
 	assert.NoError(t, err)
 	defer db.Close()
 
-	err = config1.Apply(db)
+	err = db.ApplyConfig(&config1)
 	assert.NoError(t, err)
 
 	assert.NoError(t, db.Refresh())
@@ -36,7 +36,7 @@ func TestConfigApplyRemoveTable(t *testing.T) {
 	assert.NoError(t, err)
 	defer db.Close()
 
-	err = config1.Apply(db)
+	err = db.ApplyConfig(&config1)
 	assert.NoError(t, err)
 	assert.Len(t, db.dbInfo, 0) // Before refresh
 	assert.NoError(t, db.Refresh())
@@ -52,7 +52,7 @@ func TestConfigApplyRemoveTable(t *testing.T) {
 
 	db.Refresh()
 
-	err = config2.Apply(db)
+	err = db.ApplyConfig(&config2)
 	db.Refresh()
 	assert.NoError(t, err)
 	assert.NoError(t, db.Refresh())
@@ -68,24 +68,24 @@ func TestConfigApply1234(t *testing.T) {
 
 	println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ Config 1")
 	assert.Len(t, db.dbInfo, 0)
-	assert.NoError(t, config1.Apply(db))
+	assert.NoError(t, db.ApplyConfig(&config1))
 	assert.NoError(t, db.Refresh())
 	assert.Len(t, db.dbInfo, 2)
 
 	println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ Config 2")
-	assert.NoError(t, config2.Apply(db))
+	assert.NoError(t, db.ApplyConfig(&config2))
 	assert.NoError(t, db.Refresh())
 	assert.Len(t, db.dbInfo, 1)
 
 	println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ Config 3")
-	assert.NoError(t, config3.Apply(db))
+	assert.NoError(t, db.ApplyConfig(&config3))
 	assert.NoError(t, db.Refresh())
 	assert.Len(t, db.dbInfo, 1)
 	assert.Len(t, db.dbInfo[config3.Tables[0].Name].Fields, 4)
 
 	println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ Config 4")
 	assert.True(t, config4.Tables[0].Fields[2].NotNull)
-	assert.NoError(t, config4.Apply(db))
+	assert.NoError(t, db.ApplyConfig(&config4))
 	assert.NoError(t, db.Refresh())
 	assert.Len(t, db.dbInfo, 1)
 	assert.Len(t, db.dbInfo[config3.Tables[0].Name].Fields, 5)
