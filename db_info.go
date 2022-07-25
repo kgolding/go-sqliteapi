@@ -19,6 +19,7 @@ type TableFieldInfo struct {
 	NotNull      bool        `json:"notnull,omitempty"`
 	DefaultValue interface{} `json:"default,omitempty"`
 	PrimaryKey   int         `json:"pk,omitempty"` // number of prmimary keys
+	// AutoIncrement bool        `json:"ai,omitempty"`
 }
 
 func (tis TableInfos) GetTableInfo(name string) *TableInfo {

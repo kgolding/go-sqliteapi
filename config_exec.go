@@ -2,11 +2,13 @@ package gdb
 
 import (
 	"crypto/sha256"
+	"database/sql"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
-	"gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v2"
 )
 
 const ConfigCreateSql = `CREATE TABLE IF NOT EXISTS "gdb_config" (
@@ -23,17 +25,27 @@ type GdbConfigRow struct {
 	Hash      []byte    `sb:"hash`
 }
 
-func debugf(format string, args ...interface{}) {
-	// fmt.Printf(format, args...)
+type ConfigOptions struct {
+	RetainUnmanaged bool
+	Logger          SimpleLogger
+	DryRun          bool
 }
 
-func (d *Database) ApplyConfig(c *Config) (err error) {
-	debugf("================ APPLY START ===================\n%+v\n", c)
-	defer debugf("================ APPLY END ===================\n")
-
+func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 	err = d.Refresh()
 	if err != nil {
 		return
+	}
+
+	if opts == nil {
+		opts = &ConfigOptions{
+			RetainUnmanaged: true,
+			Logger:          log.Default(),
+		}
+	}
+
+	debugf := func(format string, args ...interface{}) {
+		d.log.Printf("ApplyConfig: "+format, args...)
 	}
 
 	debugf("dbInfo: %+v\n", d.dbInfo)
@@ -60,6 +72,10 @@ func (d *Database) ApplyConfig(c *Config) (err error) {
 				return
 			}
 		}
+		if opts.DryRun {
+			tx.Rollback()
+			return
+		}
 		err = tx.Commit()
 	}()
 
@@ -71,39 +87,43 @@ func (d *Database) ApplyConfig(c *Config) (err error) {
 	}
 
 	// Remove tables
-	for _, oldTable := range d.dbInfo {
-		if t := c.GetTable(oldTable.Name); t == nil {
-			debugf("APPLY: DROP table %s\n", oldTable.Name)
-			_, err = tx.Exec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`", oldTable.Name))
-			if err != nil {
-				err = fmt.Errorf("error dropping table '%s': %w", oldTable.Name, err)
-				return
+	if !opts.RetainUnmanaged {
+		for _, oldTable := range d.dbInfo {
+			if t := c.GetTable(oldTable.Name); t == nil {
+				debugf("APPLY: dropping table %s\n", oldTable.Name)
+				s := fmt.Sprintf("DROP TABLE IF EXISTS `%s`", oldTable.Name)
+				debugf("APPLY: EXEC SQL: '%s'", s)
+				_, err = tx.Exec(s)
+				if err != nil {
+					err = fmt.Errorf("error dropping table '%s': %w", oldTable.Name, err)
+					return
+				}
+				delete(d.dbInfo, oldTable.Name)
 			}
-			delete(d.dbInfo, oldTable.Name)
 		}
 	}
 
-	var sql string
+	var s string
 	// Add/modify tables
 	for _, table := range c.Tables {
 		ot := d.dbInfo.GetTableInfo(table.Name)
 
 		if ot == nil { // CREATE TABLE
-			debugf("APPLY: CREATE table %s\n", table.Name)
-			sql, err = table.CreateSQL()
+			debugf("APPLY: create table %s\n", table.Name)
+			s, err = table.CreateSQL()
 			if err != nil {
 				return
 			}
-			debugf("APPLY: %s", sql)
-			_, err = tx.Exec(sql)
+			debugf("APPLY: EXEC SQL: '%s'", s)
+			_, err = tx.Exec(s)
 			if err != nil {
-				err = fmt.Errorf("error creating table '%s': %w\n%s", table.Name, err, sql)
+				err = fmt.Errorf("error creating table '%s': %w\n%s", table.Name, err, s)
 				return
 			}
 
 		} else { // MODIFY TABLE
 			change := false
-			// Check no change
+			// Check no change, same number of fields, all fields the same
 			if len(ot.Fields) == len(table.Fields) {
 				for i, of := range ot.Fields {
 					nf := table.Fields[i].applySpecialFields()
@@ -121,14 +141,14 @@ func (d *Database) ApplyConfig(c *Config) (err error) {
 			}
 
 			if change {
-				debugf("APPLY: MODIFY table %s\n", table.Name)
+				debugf("APPLY: modify table %s\n", table.Name)
 				// Can we get away with just adding new fields?
-				debugf("Old fields %d, New fields %d\n", len(ot.Fields), len(table.Fields))
+				// debugf("Old fields %d, New fields %d\n", len(ot.Fields), len(table.Fields))
 				bigChange := true
 				if len(ot.Fields) < len(table.Fields) {
 					justAdd := true
 					for i, of := range ot.Fields {
-						debugf("Compare '%s':\na: %+v\nb: %+v\n", table.Name, of, table.Fields[i])
+						// debugf("Compare '%s':\na: %+v\nb: %+v\n", table.Name, of, table.Fields[i])
 						nf := table.Fields[i].applySpecialFields()
 						if nf.Name != of.Name ||
 							!strings.EqualFold(nf.Type, of.Type) ||
@@ -136,7 +156,7 @@ func (d *Database) ApplyConfig(c *Config) (err error) {
 							nf.NotNull != of.NotNull ||
 							nf.PrimaryKey != of.PrimaryKey {
 							debugf("APPLY: MODIFY table %s: Big change because of field '%s'\n", table.Name, of.Name)
-							debugf("nf: %+v\nof: %+v\n", nf, of)
+							// debugf("nf: %+v\nof: %+v\n", nf, of)
 							justAdd = false
 							break
 						}
@@ -144,16 +164,16 @@ func (d *Database) ApplyConfig(c *Config) (err error) {
 
 					if justAdd {
 						var coldef string
-						debugf("APPLY: MODIFY table %s: Just add\n", table.Name)
+						debugf("APPLY: modify table %s: Just adding coldefs\n", table.Name)
 						for _, f := range table.Fields[len(ot.Fields):] {
 							coldef, err = f.ColDef()
 							if err != nil {
 								tx.Rollback()
 								return fmt.Errorf("bad field definition '%s' to '%s': %w", f.Name, table.Name, err)
 							}
-							sql := "ALTER TABLE `" + table.Name + "` ADD COLUMN " + coldef
+							s = "ALTER TABLE `" + table.Name + "` ADD COLUMN " + coldef
 							// fmt.Println(sql)
-							_, err = tx.Exec(sql)
+							_, err = tx.Exec(s)
 							if err != nil {
 								err = fmt.Errorf("error adding column '%s' to '%s': %w", f.Name, table.Name, err)
 								return
@@ -164,23 +184,23 @@ func (d *Database) ApplyConfig(c *Config) (err error) {
 				}
 
 				if bigChange {
-					debugf("APPLY: MODIFY table %s: Big change\n", table.Name)
+					debugf("APPLY: modify table %s: Big change\n", table.Name)
 					// See item 7 at https://www.sqlite.org/lang_altertable.html
 
 					// 1. Create new table with tmp name
 					tmpName := table.Name + "_tmp"
 					tableName := table.Name
-					debugf("APPLY: CREATE table %s\n", tmpName)
+					debugf("APPLY: create table %s\n", tmpName)
 					table.Name = tmpName // Temp change name
-					sql, err = table.CreateSQL()
+					s, err = table.CreateSQL()
 					table.Name = tableName // Change name back
 					if err != nil {
 						return
 					}
-					debugf("APPLY: %s", sql)
-					_, err = tx.Exec(sql)
+					debugf("APPLY: EXEC SQL: '%s'", s)
+					_, err = tx.Exec(s)
 					if err != nil {
-						err = fmt.Errorf("error creating temporary table '%s': %w\n%s", tmpName, err, sql)
+						err = fmt.Errorf("error creating temporary table '%s': %w\n%s", tmpName, err, s)
 						return
 					}
 
@@ -195,31 +215,31 @@ func (d *Database) ApplyConfig(c *Config) (err error) {
 					}
 					if len(commonFields) > 0 {
 						fcvs := "`" + strings.Join(commonFields, "`,`") + "`"
-						sql = fmt.Sprintf("INSERT INTO `%s` (%s) SELECT %s FROM `%s`",
+						s = fmt.Sprintf("INSERT INTO `%s` (%s) SELECT %s FROM `%s`",
 							tmpName, fcvs, fcvs, ot.Name)
-						debugf("APPLY: %s", sql)
-						_, err = tx.Exec(sql)
+						debugf("APPLY: EXEC SQL: '%s'", s)
+						_, err = tx.Exec(s)
 						if err != nil {
-							err = fmt.Errorf("error copying data from '%s' to '%s': %w\n%s", ot.Name, tmpName, err, sql)
+							err = fmt.Errorf("error copying data from '%s' to '%s': %w\n%s", ot.Name, tmpName, err, s)
 							return
 						}
 					}
 
 					// 3. Drop old table
-					sql = fmt.Sprintf("DROP TABLE `%s`", ot.Name)
-					debugf("APPLY: %s", sql)
-					_, err = tx.Exec(sql)
+					s = fmt.Sprintf("DROP TABLE `%s`", ot.Name)
+					debugf("APPLY: EXEC SQL: '%s'", s)
+					_, err = tx.Exec(s)
 					if err != nil {
-						err = fmt.Errorf("error dropping old table '%s': %w\n%s", ot.Name, err, sql)
+						err = fmt.Errorf("error dropping old table '%s': %w\n%s", ot.Name, err, s)
 						return
 					}
 
 					// 4. Rename tmp
-					sql = fmt.Sprintf("ALTER TABLE `%s` RENAME TO `%s`", tmpName, tableName)
-					debugf("APPLY: %s", sql)
-					_, err = tx.Exec(sql)
+					s = fmt.Sprintf("ALTER TABLE `%s` RENAME TO `%s`", tmpName, tableName)
+					debugf("APPLY: EXEC SQL: '%s'", s)
+					_, err = tx.Exec(s)
 					if err != nil {
-						err = fmt.Errorf("error renaming table '%s' to '%s': %w\n%s", tmpName, tableName, err, sql)
+						err = fmt.Errorf("error renaming table '%s' to '%s': %w\n%s", tmpName, tableName, err, s)
 						return
 					}
 				}
@@ -235,10 +255,16 @@ func (d *Database) ApplyConfig(c *Config) (err error) {
 	h := sha256.New()
 	h.Write(b)
 
-	_, err = tx.Exec("INSERT INTO gdb_config (config, hash) VALUES (?, ?)", b, h.Sum(nil))
+	var res sql.Result
+	res, err = tx.Exec("INSERT INTO gdb_config (config, hash) VALUES (?, ?)", b, h.Sum(nil))
 	if err != nil {
 		return
 	}
+
+	version, _ := res.LastInsertId()
+	tx.Exec(fmt.Sprintf("PRAGMA user_version=%d", version))
+
+	d.config = c
 
 	return
 }

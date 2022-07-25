@@ -4,33 +4,31 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"time"
-
-	log "github.com/sirupsen/logrus"
 )
 
 var ErrUnknownID = errors.New("unknown ID")
 
 func (d *Database) insertMap(table string, data map[string]interface{}, user User) (int, error) {
+	logf := func(format string, args ...interface{}) {
+		d.log.Printf("insertMap: "+format, args...)
+	}
+
 	tableFields, err := d.CheckTableNameGetFields(table)
 	if err != nil {
-		log.WithError(err).Error("Insert MAP - error fetching table info")
+		logf("error fetching table info: %s", err)
 		return 0, err
 	}
 
-	// d.Lock()
-	// defer d.Unlock()
-
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*10)
+	ctx, _ := context.WithTimeout(context.Background(), d.timeout)
 	tx, err := d.DB.BeginTxx(ctx, nil)
 	if err != nil {
-		log.WithError(err).Error("Insert MAP - error starting transaction")
+		logf("error starting transaction: %s", err)
 		return 0, err
 	}
 
 	err = d.runHooks(table, HookParams{data, HookBeforeInsert, tx, user})
 	if err != nil {
-		log.WithError(err).Error("Insert MAP - error running hook")
+		logf("error running before before hook: %s", err)
 		tx.Rollback()
 		return 0, err
 	}
@@ -40,8 +38,7 @@ func (d *Database) insertMap(table string, data map[string]interface{}, user Use
 	for k, v := range data {
 		for _, f := range tableFields {
 			if f.Name == k {
-				// if _, ok := tableFields[k]; ok { // Only save fields that exist in the table
-				if d.IsFieldWritable(table, k) { // And are writable
+				if f.PrimaryKey == 0 && d.IsFieldWritable(table, k) { // And are writable
 					err = d.FieldValidation(table, k, v)
 					if err != nil {
 						return 0, err
@@ -67,11 +64,11 @@ func (d *Database) insertMap(table string, data map[string]interface{}, user Use
 	sql += " (" + strings.Join(fields, ",") + ")"
 	sql += " VALUES (?" + strings.Repeat(",?", len(values)-1) + ")"
 
-	log.WithField("SQL", sql).Info("Insert MAP")
+	logf("SQL: %s", sql)
 
 	res, err := tx.Exec(sql, values...)
 	if err != nil {
-		log.WithError(err).Error("Insert MAP")
+		logf("error executing sql: %s", err)
 		tx.Rollback()
 		return 0, err
 	}
@@ -82,14 +79,14 @@ func (d *Database) insertMap(table string, data map[string]interface{}, user Use
 
 	err = d.runHooks(table, HookParams{data, HookAfterInsert, tx, user})
 	if err != nil {
-		log.WithError(err).Error("Insert MAP - error running hook")
+		logf("error running after insert hook: %s", err)
 		tx.Rollback()
 		return 0, err
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		log.WithError(err).Error("Insert MAP - error committing")
+		logf("error commiting: %s", err)
 		return 0, err
 	}
 
@@ -97,25 +94,26 @@ func (d *Database) insertMap(table string, data map[string]interface{}, user Use
 }
 
 func (d *Database) updateMap(table string, data map[string]interface{}, user User) error {
+	logf := func(format string, args ...interface{}) {
+		d.log.Printf("updateMap: "+format, args...)
+	}
+
 	tableFields, err := d.CheckTableNameGetFields(table)
 	if err != nil {
-		log.WithError(err).Error("Insert MAP - error fetching table info")
+		logf("error fetching table info: %s", err)
 		return err
 	}
 
-	// d.Lock()
-	// defer d.Unlock()
-
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*10)
+	ctx, _ := context.WithTimeout(context.Background(), d.timeout)
 	tx, err := d.DB.BeginTxx(ctx, nil)
 	if err != nil {
-		log.WithError(err).Error("Update MAP - error starting transaction")
+		logf("error starting transaction: %s", err)
 		return err
 	}
 
 	err = d.runHooks(table, HookParams{data, HookBeforeUpdate, tx, user})
 	if err != nil {
-		log.WithError(err).Error("Update MAP - error running hook")
+		logf("error running before insert hook: %s", err)
 		tx.Rollback()
 		return err
 	}
@@ -156,25 +154,25 @@ func (d *Database) updateMap(table string, data map[string]interface{}, user Use
 	sql += " SET " + strings.Join(fields, "=?,") + "=?"
 	sql += " WHERE " + strings.Join(pks, "=? AND ") + "=?"
 
-	log.WithField("SQL", sql).WithField("Values", fieldValues).Info("Update MAP")
+	logf("SQL: %s", sql)
 
 	_, err = tx.Exec(sql, append(fieldValues, pkValues...)...)
 	if err != nil {
-		log.WithError(err).Error("Update MAP - error updating")
+		logf("error executing sql: %s", err)
 		tx.Rollback()
 		return err
 	}
 
 	err = d.runHooks(table, HookParams{data, HookAfterUpdate, tx, user})
 	if err != nil {
-		log.WithError(err).Error("Update MAP - error running hook")
+		logf("error running after hook: %s", err)
 		tx.Rollback()
 		return err
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		log.WithError(err).Error("Update MAP - error committing")
+		logf("error committing: %s", err)
 		tx.Rollback()
 		return err
 	}
@@ -183,19 +181,19 @@ func (d *Database) updateMap(table string, data map[string]interface{}, user Use
 }
 
 func (d *Database) delete(table string, id int, user User) error {
-	_, err := d.CheckTableNameGetFields(table)
-	if err != nil {
-		log.WithError(err).Error("Delete - error fetching table info")
-		return err
+	logf := func(format string, args ...interface{}) {
+		d.log.Printf("updateMap: "+format, args...)
 	}
 
-	// d.Lock()
-	// defer d.Unlock()
-
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*10)
+	_, err := d.CheckTableNameGetFields(table)
+	if err != nil {
+		logf("error fetching table info: %s", err)
+		return err
+	}
+	ctx, _ := context.WithTimeout(context.Background(), d.timeout)
 	tx, err := d.DB.BeginTxx(ctx, nil)
 	if err != nil {
-		log.WithError(err).Error("Delete row - error starting transaction")
+		logf("error starting transaction: %s", err)
 		return err
 	}
 
@@ -204,7 +202,7 @@ func (d *Database) delete(table string, id int, user User) error {
 	}
 	err = d.runHooks(table, HookParams{data, HookBeforeDelete, tx, user})
 	if err != nil {
-		log.WithError(err).Error("Delete row - error running hook")
+		logf("error running before hook: %s", err)
 		tx.Rollback()
 		return err
 	}
@@ -212,32 +210,32 @@ func (d *Database) delete(table string, id int, user User) error {
 	sql := "DELETE FROM `" + table + "`"
 	sql += " WHERE id=?"
 
-	log.WithField("SQL", sql).WithField("ID", id).Info("Delete row")
+	logf("SQL: %s", sql)
 
 	res, err := tx.Exec(sql, id)
 	if err != nil {
-		log.WithError(err).Error("Delete row - error updating")
+		logf("error executing sql: %s", err)
 		tx.Rollback()
 		return err
 	}
 
 	err = d.runHooks(table, HookParams{data, HookAfterDelete, tx, user})
 	if err != nil {
-		log.WithError(err).Error("Delete row - error running hook")
+		logf("error running after hook: %s", err)
 		tx.Rollback()
 		return err
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		log.WithError(err).Error("Delete row - error committing")
+		logf("error committing: %s", err)
 		tx.Rollback()
 		return err
 	}
 
 	v, err := res.RowsAffected()
 	if err != nil {
-		log.WithError(err).Error("Delete row - error committing")
+		logf("unable to read rows affected: %s", err)
 		tx.Rollback()
 		return err
 	}

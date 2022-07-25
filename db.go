@@ -6,40 +6,71 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
-	log "github.com/sirupsen/logrus"
 )
 
 // regName validates a string as being a safe table/field name
 var regName = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
 
 type Database struct {
-	DB                  *sqlx.DB
-	log                 *log.Logger
-	hooks               []Hook
-	tableFieldsMetaData map[string]map[string]*TableFieldMetaData
-	dbInfo              TableInfos
+	DB    *sqlx.DB
+	log   SimpleLogger
+	hooks []Hook
+	// tableFieldsMetaData map[string]map[string]*TableFieldMetaData
+	dbInfo  TableInfos
+	config  *Config
+	timeout time.Duration
 	sync.Mutex
 }
 
-func NewDatabase(file string) (*Database, error) {
+type Option func(*Database) error
+
+func YamlConfig(b []byte) Option {
+	return func(d *Database) error {
+		c, err := NewConfigFromYaml(b)
+		if err != nil {
+			return err
+		}
+		return d.ApplyConfig(c, &ConfigOptions{
+			RetainUnmanaged: true,
+			// DryRun:          true,
+			Logger: log.Default(),
+		})
+	}
+}
+
+type SimpleLogger interface {
+	Println(v ...interface{})
+	Printf(format string, v ...interface{})
+}
+
+func Log(logger SimpleLogger) Option {
+	return func(d *Database) error {
+		d.log = logger
+		return nil
+	}
+}
+
+func NewDatabase(file string, opts ...Option) (*Database, error) {
 	var err error
 	d := &Database{
-		log:                 log.New(),
-		hooks:               make([]Hook, 0),
-		tableFieldsMetaData: make(map[string]map[string]*TableFieldMetaData),
-		dbInfo:              make(TableInfos),
+		log:   log.New(ioutil.Discard, "", 0),
+		hooks: make([]Hook, 0),
+		// tableFieldsMetaData: make(map[string]map[string]*TableFieldMetaData),
+		dbInfo:  make(TableInfos),
+		timeout: time.Second * 30,
 	}
-	d.log.SetLevel(log.DebugLevel)
 	d.DB, err = sqlx.Open("sqlite3", file)
 	if err != nil {
 		return nil, err
@@ -47,20 +78,18 @@ func NewDatabase(file string) (*Database, error) {
 
 	d.DB.Exec("PRAGMA foreign_keys=ON")
 
+	for _, opt := range opts {
+		err = opt(d)
+		if err != nil {
+			d.Close()
+			return nil, err
+		}
+	}
+
 	d.Refresh()
 
 	return d, nil
 }
-
-// @TODO
-// func (d *Database) Backup(destination string) error {
-// 	sql
-// 	if !ok {
-// 		return errors.New("Not a sqlite3 database")
-// 	}
-
-// 	return nil
-// }
 
 func (d *Database) GetObjects(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -105,23 +134,23 @@ func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {
 
 	tableFields, err := d.CheckTableNameGetFields(table)
 	if err != nil {
-		log.WithError(err).Error("GetRows - error fetching table info")
+		d.log.Printf("GetRows: error fetching table info: %s", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	if r.URL.RawQuery == "info" {
-		ret := make([]TableFieldInfoWithMetaData, 0)
-		for _, tf := range tableFields {
-			x := TableFieldInfoWithMetaData{
-				TableFieldInfo: tf,
-			}
-			x.TableFieldMetaData = *d.GetFieldMetaData(table, tf.Name)
-			ret = append(ret, x)
-		}
+		// ret := make([]TableFieldInfoWithMetaData, 0)
+		// for _, tf := range tableFields {
+		// 	x := TableFieldInfoWithMetaData{
+		// 		TableFieldInfo: tf,
+		// 	}
+		// 	x.TableFieldMetaData = *d.GetFieldMetaData(table, tf.Name)
+		// 	ret = append(ret, x)
+		// }
 		w.Header().Set("Content-Type", "application/json")
 		enc := json.NewEncoder(w)
-		enc.Encode(ret)
+		enc.Encode(tableFields)
 		return
 	}
 
@@ -149,9 +178,7 @@ func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {
 	}
 	q += fmt.Sprintf(" LIMIT %d, %d", offset, limit)
 
-	log.WithFields(log.Fields{
-		"sql": q,
-	}).Infof("GetRows")
+	d.log.Printf("GetRows: SQL: %s", q)
 
 	// Change this to use Content-Type
 	switch strings.ToLower(r.URL.Query().Get("format")) {
@@ -172,7 +199,7 @@ func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		log.WithField("SQL", q).Error(err)
+		d.log.Printf("GetRows: error: %s", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -234,7 +261,7 @@ func (d *Database) GetRow(w http.ResponseWriter, r *http.Request) {
 
 	_, err := d.CheckTableNameGetFields(table)
 	if err != nil {
-		log.WithError(err).Error("GetRow - error fetching table info")
+		d.log.Printf("GetRow: error fetching table info: %s", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -253,7 +280,7 @@ func (d *Database) GetRow(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	q := "SELECT " + strings.Join(selectArray, ",") + " FROM `" + table + "` WHERE id=?"
-	log.Info(q)
+	d.log.Printf("GetRow: SQL: %s", q)
 	err = d.queryJsonWriterRow(w, q, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
