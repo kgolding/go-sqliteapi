@@ -42,11 +42,17 @@ func YamlConfig(b []byte) Option {
 		if err != nil {
 			return err
 		}
-		return d.ApplyConfig(c, &ConfigOptions{
+		err = d.ApplyConfig(c, &ConfigOptions{
 			RetainUnmanaged: true,
 			// DryRun:          true,
 			Logger: log.Default(),
 		})
+		if err != nil {
+			return err
+		}
+		d.log.Println("Config:\n" + c.String())
+		d.config = c
+		return nil
 	}
 }
 
@@ -124,33 +130,41 @@ func (d *Database) PostSQL(w http.ResponseWriter, r *http.Request) {
 
 type TableFieldInfoWithMetaData struct {
 	TableFieldInfo
-	TableFieldMetaData
-	// Hidden         bool `json:"hidden,omitempty"`
-	// WriteProtected bool `json:"writeprotected,omitempty"`
+	Field
 }
 
 func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {
 	table := chi.URLParam(r, "table")
 
-	tableFields, err := d.CheckTableNameGetFields(table)
-	if err != nil {
-		d.log.Printf("GetRows: error fetching table info: %s", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
 	if r.URL.RawQuery == "info" {
-		// ret := make([]TableFieldInfoWithMetaData, 0)
-		// for _, tf := range tableFields {
-		// 	x := TableFieldInfoWithMetaData{
-		// 		TableFieldInfo: tf,
-		// 	}
-		// 	x.TableFieldMetaData = *d.GetFieldMetaData(table, tf.Name)
-		// 	ret = append(ret, x)
-		// }
+		tableFields, err := d.CheckTableNameGetFields(table)
+		if err != nil {
+			d.log.Printf("GetRows: error fetching table info: %s", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Get the actual database info from dbinfo, and then add the extra info from config
+		ct := d.config.GetTable(table)
+		ret := make([]TableFieldInfoWithMetaData, 0)
+		for _, tf := range tableFields {
+			x := TableFieldInfoWithMetaData{
+				TableFieldInfo: tf,
+			}
+			if ct != nil {
+				for _, ctf := range ct.Fields {
+					if ctf.Name == tf.Name {
+						x.Field = ctf
+					}
+				}
+
+			}
+			ret = append(ret, x)
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		enc := json.NewEncoder(w)
-		enc.Encode(tableFields)
+		enc.Encode(ret)
 		return
 	}
 

@@ -25,6 +25,46 @@ func TestNew(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestJoin(t *testing.T) {
+	db, err := NewDatabase("file::memory:?cache=shared")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	cfg := &Config{
+		Tables: []Table{
+			Table{
+				Name: "t1",
+				Fields: []Field{
+					Field{Name: "id"},
+					Field{Name: "name"},
+				},
+			},
+			Table{
+				Name: "t2",
+				Fields: []Field{
+					Field{Name: "id"},
+					Field{Name: "name"},
+					Field{Name: "t1Id", References: "t1.id/name"},
+				},
+			},
+		},
+	}
+
+	assert.NoError(t, db.ApplyConfig(cfg, nil))
+	db.Refresh()
+
+	_, err = db.insertMap("t1", map[string]interface{}{"name": "T1 Row 1"}, nil)
+	assert.NoError(t, err)
+	_, err = db.insertMap("t1", map[string]interface{}{"name": "T1 Row 2"}, nil)
+	assert.NoError(t, err)
+	_, err = db.insertMap("t2", map[string]interface{}{"name": "T2 Row 1", "t1Id": 1}, nil)
+	assert.NoError(t, err)
+
+	// @TODO do a join
+	assert.NotNil(t, nil, "@TODO")
+
+}
+
 func TestBackup(t *testing.T) {
 	db, err := NewDatabase("file::memory:?cache=shared")
 	assert.NoError(t, err)
@@ -58,5 +98,4 @@ func TestBackup(t *testing.T) {
 	var c int
 	assert.NoError(t, d.Get(&c, "SELECT COUNT(*) FROM test"))
 	assert.Equal(t, c, rows)
-
 }

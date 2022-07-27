@@ -124,7 +124,8 @@ func TestConfigApply1234(t *testing.T) {
 	var db *Database
 	var err error
 	if true {
-		db, err = NewDatabase("file::memory:?cache=shared")
+		db, err = NewDatabase("file::memory:?cache=shared") // Log(log.Default()),
+
 	} else {
 		os.Remove("test.db")
 		db, err = NewDatabase("test.db")
@@ -185,6 +186,12 @@ func TestConfigGetTable(t *testing.T) {
 	assert.Nil(t, c.GetTable("dummy"))
 }
 
+func TestRemoveQuotes(t *testing.T) {
+	assert.Equal(t, removeQuotesIfString("'ABC'"), "ABC")
+	assert.Equal(t, removeQuotesIfString(`"ABC"`), "ABC")
+	assert.Equal(t, removeQuotesIfString(`"ABC`), `"ABC`)
+}
+
 func TestParseYaml(t *testing.T) {
 	s := `tables:
   slideshow:
@@ -194,7 +201,7 @@ func TestParseYaml(t *testing.T) {
       notnull: true
     age:
       type: integer
-      unique: true`
+      #unique: true`
 
 	c, err := NewConfigFromYaml([]byte(s))
 	assert.NoError(t, err)
@@ -248,12 +255,12 @@ var config3 = Config{
 				{Name: "id"},
 				{Name: "createdAt"},
 				{
-					Name:   "title",
-					Type:   TypeText,
-					Label:  "Title",
-					Min:    3,
-					Max:    24,
-					RegExp: "[a-z].*",
+					Name:  "title",
+					Type:  TypeText,
+					Label: "Title",
+					Min:   3,
+					Max:   24,
+					Regex: "[a-z].*",
 				},
 				{ // CHANGED
 					Name:  "age",
@@ -280,7 +287,7 @@ var config4 = Config{
 					Label:   "Title",
 					Min:     3,
 					Max:     24,
-					RegExp:  "[a-z].*",
+					Regex:   "[a-z].*",
 				},
 				{
 					Name:  "age",

@@ -61,8 +61,10 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 		return
 	}
 
+	noChanges := true
+
 	defer func() {
-		if err != nil {
+		if err != nil || noChanges {
 			tx.Rollback()
 			return
 		} else {
@@ -77,6 +79,9 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 			return
 		}
 		err = tx.Commit()
+		if err != nil {
+			d.Refresh()
+		}
 	}()
 
 	// Make sure the config table exists
@@ -98,6 +103,7 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 					err = fmt.Errorf("error dropping table '%s': %w", oldTable.Name, err)
 					return
 				}
+				noChanges = false
 				delete(d.dbInfo, oldTable.Name)
 			}
 		}
@@ -107,7 +113,6 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 	// Add/modify tables
 	for _, table := range c.Tables {
 		ot := d.dbInfo.GetTableInfo(table.Name)
-
 		if ot == nil { // CREATE TABLE
 			debugf("APPLY: create table %s\n", table.Name)
 			s, err = table.CreateSQL()
@@ -120,6 +125,7 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 				err = fmt.Errorf("error creating table '%s': %w\n%s", table.Name, err, s)
 				return
 			}
+			noChanges = false
 
 		} else { // MODIFY TABLE
 			change := false
@@ -127,11 +133,9 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 			if len(ot.Fields) == len(table.Fields) {
 				for i, of := range ot.Fields {
 					nf := table.Fields[i].applySpecialFields()
-					if nf.Name != of.Name ||
-						!strings.EqualFold(nf.Type, of.Type) ||
-						nf.Default != of.DefaultValue ||
-						nf.NotNull != of.NotNull ||
-						nf.PrimaryKey != of.PrimaryKey {
+					err := nf.CompareDbFields(&of)
+					if err != nil {
+						debugf("%s.%s: change trigger by: %s", table.Name, nf.Name, err)
 						change = true
 						break
 					}
@@ -150,12 +154,9 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 					for i, of := range ot.Fields {
 						// debugf("Compare '%s':\na: %+v\nb: %+v\n", table.Name, of, table.Fields[i])
 						nf := table.Fields[i].applySpecialFields()
-						if nf.Name != of.Name ||
-							!strings.EqualFold(nf.Type, of.Type) ||
-							nf.Default != of.DefaultValue ||
-							nf.NotNull != of.NotNull ||
-							nf.PrimaryKey != of.PrimaryKey {
-							debugf("APPLY: MODIFY table %s: Big change because of field '%s'\n", table.Name, of.Name)
+						err := nf.CompareDbFields(&of)
+						if err != nil {
+							debugf("APPLY: MODIFY table %s: Big change because of field '%s': %s\n", table.Name, of.Name, err)
 							// debugf("nf: %+v\nof: %+v\n", nf, of)
 							justAdd = false
 							break
@@ -178,6 +179,7 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 								err = fmt.Errorf("error adding column '%s' to '%s': %w", f.Name, table.Name, err)
 								return
 							}
+							noChanges = false
 						}
 						bigChange = false
 					}
@@ -242,9 +244,16 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 						err = fmt.Errorf("error renaming table '%s' to '%s': %w\n%s", tmpName, tableName, err, s)
 						return
 					}
+					noChanges = false
 				}
 			}
 		}
+	}
+
+	if noChanges {
+		debugf("No changes :)")
+		err = nil
+		return
 	}
 
 	b, err := yaml.Marshal(c)
@@ -263,6 +272,8 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 
 	version, _ := res.LastInsertId()
 	tx.Exec(fmt.Sprintf("PRAGMA user_version=%d", version))
+
+	debugf("Success, version is now %d:\n%s", version, c)
 
 	d.config = c
 

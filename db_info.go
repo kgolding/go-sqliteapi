@@ -95,6 +95,7 @@ func (d *Database) Refresh() error {
 				return err
 			}
 			f.Type = strings.ToLower(f.Type)
+			f.DefaultValue = removeQuotesIfString(f.DefaultValue)
 			table.Fields = append(table.Fields, f)
 		}
 
@@ -102,4 +103,16 @@ func (d *Database) Refresh() error {
 	}
 	d.dbInfo = info
 	return nil
+}
+
+func removeQuotesIfString(x interface{}) interface{} {
+	if s, ok := x.(string); ok {
+		if len(s) > 3 {
+			if (strings.HasPrefix(s, "'") && strings.HasSuffix(s, "'")) ||
+				(strings.HasPrefix(s, `"`) && strings.HasSuffix(s, `"`)) {
+				return s[1 : len(s)-1]
+			}
+		}
+	}
+	return x
 }
