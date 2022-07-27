@@ -1,21 +1,17 @@
 package gdb
 
 import (
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/go-chi/chi"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -119,9 +115,7 @@ func (d *Database) PostSQL(w http.ResponseWriter, r *http.Request) {
 	// @TODO Restrict/Sanitise SQL ?
 
 	w.Header().Set("Content-Type", "application/json")
-	err = d.QueryJsonWriter(
-		w, string(sql),
-	)
+	err = d.QueryJsonWriter(w, string(sql), nil)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -131,288 +125,6 @@ func (d *Database) PostSQL(w http.ResponseWriter, r *http.Request) {
 type TableFieldInfoWithMetaData struct {
 	TableFieldInfo
 	Field
-}
-
-func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {
-	table := chi.URLParam(r, "table")
-
-	if r.URL.RawQuery == "info" {
-		tableFields, err := d.CheckTableNameGetFields(table)
-		if err != nil {
-			d.log.Printf("GetRows: error fetching table info: %s", err)
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		// Get the actual database info from dbinfo, and then add the extra info from config
-		ct := d.config.GetTable(table)
-		ret := make([]TableFieldInfoWithMetaData, 0)
-		for _, tf := range tableFields {
-			x := TableFieldInfoWithMetaData{
-				TableFieldInfo: tf,
-			}
-			if ct != nil {
-				for _, ctf := range ct.Fields {
-					if ctf.Name == tf.Name {
-						x.Field = ctf
-					}
-				}
-
-			}
-			ret = append(ret, x)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		enc := json.NewEncoder(w)
-		enc.Encode(ret)
-		return
-	}
-
-	resultCols, err := d.SanitiseSelectByTable(r.URL.Query().Get("select"), table)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	where := r.URL.Query().Get("where")
-	search := r.URL.Query().Get("search")
-	sort := r.URL.Query().Get("sort")
-
-	offset, limit, err := d.GetLimitOffset(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	joins := make([]string, 0)
-
-	// @TODO namespace selectArray fields
-
-	// Add joins
-	if d.config != nil {
-		if ct := d.config.GetTable(table); ct != nil {
-			for _, rc := range resultCols {
-				for _, f := range ct.Fields {
-					if rc.Field == f.Name && f.References != "" {
-						ref, err := NewReference(f.References)
-						if err == nil {
-							resultCols = append(resultCols, ref.ResultColLabel(rc.Field+"_RefLabel"))
-							joins = append(joins, fmt.Sprintf(
-								"JOIN `%s` ON %s = %s",
-								ref.Table, ref.ResultColKey("").String(), rc.String()))
-						}
-					}
-				}
-			}
-		}
-	}
-
-	args := make([]interface{}, 0)
-
-	q := "SELECT " + resultCols.String() + "\nFROM " + table
-
-	// JOINS
-	if len(joins) > 0 {
-		q += "\n" + strings.Join(joins, "\n")
-	}
-
-	// WHERE
-	if search != "" {
-		conditions := make([]string, 0)
-		for _, rc := range resultCols {
-			conditions = append(conditions, rc.String()+" LIKE ?")
-			args = append(args, search)
-		}
-		q += "\nWHERE " + strings.Join(conditions, " OR ")
-	}
-
-	// TO FIX
-	if where != "" {
-		q += "\nWHERE " + where
-	}
-
-	// ORDER BY
-	if sort != "" {
-		q += "\nORDER BY " + sort
-	}
-
-	// LIMIT/OFFSET
-	q += fmt.Sprintf("\nLIMIT %d, %d", offset, limit)
-
-	d.log.Printf("GetRows: SQL: %s", q)
-
-	// Change this to use Content-Type
-	switch strings.ToLower(r.URL.Query().Get("format")) {
-	case "csv":
-		if fname := r.URL.Query().Get("filename"); fname != "" {
-			w.Header().Set("Content-Disposition", `attachment; filename="`+fname+`"`)
-		}
-		w.Header().Set("Content-Type", "text/csv")
-		err = d.QueryCsvWriter(w, q, args...)
-
-	case "array":
-		w.Header().Set("Content-Type", "application/json")
-		err = d.QueryJsonArrayWriter(w, q, args...)
-
-	default:
-		w.Header().Set("Content-Type", "application/json")
-		err = d.QueryJsonWriter(w, q, args...)
-	}
-
-	if err != nil {
-		d.log.Printf("GetRows: error: %s", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-}
-
-func (d *Database) GetLimitOffset(r *http.Request) (int, int, error) {
-	offset := 0
-	limit := 1000
-
-	if v := r.URL.Query().Get("offset"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return offset, limit, err
-		}
-		if n < 0 {
-			return offset, limit, errors.New("invalid offset")
-		}
-		offset = n
-	}
-
-	if v := r.URL.Query().Get("limit"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return offset, limit, err
-		}
-		if n < 0 {
-			return offset, limit, errors.New("invalid offset")
-		}
-		limit = n
-	}
-	return offset, limit, nil
-}
-
-func (d *Database) PostTable(w http.ResponseWriter, r *http.Request) {
-	table := chi.URLParam(r, "table")
-
-	dec := json.NewDecoder(r.Body)
-	data := make(map[string]interface{})
-	err := dec.Decode(&data)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// user := auth.GetUser(r)
-	var user User // BLANK USER
-
-	id, err := d.insertMap(table, data, user)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	w.Write([]byte(strconv.Itoa(id)))
-}
-
-func (d *Database) GetRow(w http.ResponseWriter, r *http.Request) {
-	table := chi.URLParam(r, "table")
-
-	_, err := d.CheckTableNameGetFields(table)
-	if err != nil {
-		d.log.Printf("GetRow: error fetching table info: %s", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, "invalid row ID", http.StatusBadRequest)
-		return
-	}
-
-	selectArray, err := d.SanitiseSelectByTable(r.URL.Query().Get("select"), table)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	q := "SELECT " + selectArray.String() + "\nFROM `" + table + "` WHERE id=?"
-	d.log.Printf("GetRow: SQL: %s", q)
-	err = d.queryJsonWriterRow(w, q, id)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "", http.StatusNotFound)
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-}
-
-func (d *Database) PutRow(w http.ResponseWriter, r *http.Request) {
-	table := chi.URLParam(r, "table")
-	if !regName.MatchString(table) {
-		http.Error(w, "invalid table/view", http.StatusBadRequest)
-		return
-	}
-
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, "invalid row ID", http.StatusBadRequest)
-		return
-	}
-
-	dec := json.NewDecoder(r.Body)
-	data := make(map[string]interface{})
-	err = dec.Decode(&data)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(err.Error()))
-		return
-	}
-	// @TODO Should I check the data id?
-
-	data["id"] = id
-
-	// user := auth.GetUser(r)
-	var user User // BLANK USER
-
-	err = d.updateMap(table, data, user)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-}
-
-func (d *Database) DelRow(w http.ResponseWriter, r *http.Request) {
-	table := chi.URLParam(r, "table")
-	if !regName.MatchString(table) {
-		http.Error(w, "invalid table/view", http.StatusBadRequest)
-		return
-	}
-
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, "invalid row ID", http.StatusBadRequest)
-		return
-	}
-
-	// user := auth.GetUser(r)
-	var user User // BLANK USER
-
-	err = d.delete(table, id, user)
-	if err != nil {
-		if errors.Is(err, ErrUnknownID) {
-			http.Error(w, err.Error(), http.StatusNotFound)
-		} else {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
-		return
-	}
 }
 
 func (d *Database) Close() {

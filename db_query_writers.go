@@ -47,7 +47,7 @@ func (d *Database) QueryJsonArrayWriter(w io.Writer, query string, args ...inter
 }
 
 // queryJsonWriter runs the query and streams the result as json to the given Writer
-func (d *Database) QueryJsonWriter(w io.Writer, query string, args ...interface{}) error {
+func (d *Database) QueryJsonWriter(w io.Writer, query string, args []interface{}) error {
 	tx, err := d.DB.Beginx()
 	if err != nil {
 		return err
@@ -87,7 +87,7 @@ func (d *Database) QueryJsonWriter(w io.Writer, query string, args ...interface{
 }
 
 // queryCsvWriter runs the query and streams the result as csv to the given Writer
-func (d *Database) QueryCsvWriter(w io.Writer, query string, args ...interface{}) error {
+func (d *Database) QueryCsvWriter(w io.Writer, query string, args []interface{}) error {
 	tx, err := d.DB.Beginx()
 	if err != nil {
 		return err
@@ -139,7 +139,7 @@ func (d *Database) QueryCsvWriter(w io.Writer, query string, args ...interface{}
 }
 
 // queryJsonWriter runs the query and streams the result as json to the given Writer
-func (d *Database) queryJsonWriterRow(w io.Writer, query string, args ...interface{}) error {
+func (d *Database) queryJsonWriterRow(w io.Writer, query string, args []interface{}) error {
 	tx, err := d.DB.Beginx()
 	if err != nil {
 		return err

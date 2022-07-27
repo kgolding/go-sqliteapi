@@ -31,6 +31,21 @@ func (tis TableInfos) GetTableInfo(name string) *TableInfo {
 	return nil
 }
 
+func (ti TableInfo) GetPrimaryKey() ResultColumn {
+	for _, f := range ti.Fields {
+		if f.PrimaryKey > 0 {
+			return ResultColumn{
+				Table: ti.Name,
+				Field: f.Name,
+			}
+		}
+	}
+	return ResultColumn{
+		Table: ti.Name,
+		Field: "X",
+	}
+}
+
 func (tis TableInfos) String() string {
 	s := ""
 	for _, ti := range tis {
