@@ -168,13 +168,14 @@ func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	selectArray, err := d.SanitiseSelectByTable(r.URL.Query().Get("select"), table)
+	resultCols, err := d.SanitiseSelectByTable(r.URL.Query().Get("select"), table)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	where := r.URL.Query().Get("where")
+	search := r.URL.Query().Get("search")
 	sort := r.URL.Query().Get("sort")
 
 	offset, limit, err := d.GetLimitOffset(r)
@@ -183,14 +184,60 @@ func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	q := "SELECT " + strings.Join(selectArray, ",") + " FROM " + table
+	joins := make([]string, 0)
+
+	// @TODO namespace selectArray fields
+
+	// Add joins
+	if d.config != nil {
+		if ct := d.config.GetTable(table); ct != nil {
+			for _, rc := range resultCols {
+				for _, f := range ct.Fields {
+					if rc.Field == f.Name && f.References != "" {
+						ref, err := NewReference(f.References)
+						if err == nil {
+							resultCols = append(resultCols, ref.ResultColLabel(rc.Field+"_RefLabel"))
+							joins = append(joins, fmt.Sprintf(
+								"JOIN `%s` ON %s = %s",
+								ref.Table, ref.ResultColKey("").String(), rc.String()))
+						}
+					}
+				}
+			}
+		}
+	}
+
+	args := make([]interface{}, 0)
+
+	q := "SELECT " + resultCols.String() + "\nFROM " + table
+
+	// JOINS
+	if len(joins) > 0 {
+		q += "\n" + strings.Join(joins, "\n")
+	}
+
+	// WHERE
+	if search != "" {
+		conditions := make([]string, 0)
+		for _, rc := range resultCols {
+			conditions = append(conditions, rc.String()+" LIKE ?")
+			args = append(args, search)
+		}
+		q += "\nWHERE " + strings.Join(conditions, " OR ")
+	}
+
+	// TO FIX
 	if where != "" {
-		q += " WHERE " + where
+		q += "\nWHERE " + where
 	}
+
+	// ORDER BY
 	if sort != "" {
-		q += " ORDER BY " + sort
+		q += "\nORDER BY " + sort
 	}
-	q += fmt.Sprintf(" LIMIT %d, %d", offset, limit)
+
+	// LIMIT/OFFSET
+	q += fmt.Sprintf("\nLIMIT %d, %d", offset, limit)
 
 	d.log.Printf("GetRows: SQL: %s", q)
 
@@ -201,15 +248,15 @@ func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Disposition", `attachment; filename="`+fname+`"`)
 		}
 		w.Header().Set("Content-Type", "text/csv")
-		err = d.QueryCsvWriter(w, q)
+		err = d.QueryCsvWriter(w, q, args...)
 
 	case "array":
 		w.Header().Set("Content-Type", "application/json")
-		err = d.QueryJsonArrayWriter(w, q)
+		err = d.QueryJsonArrayWriter(w, q, args...)
 
 	default:
 		w.Header().Set("Content-Type", "application/json")
-		err = d.QueryJsonWriter(w, q)
+		err = d.QueryJsonWriter(w, q, args...)
 	}
 
 	if err != nil {
@@ -293,7 +340,7 @@ func (d *Database) GetRow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	q := "SELECT " + strings.Join(selectArray, ",") + " FROM `" + table + "` WHERE id=?"
+	q := "SELECT " + selectArray.String() + "\nFROM `" + table + "` WHERE id=?"
 	d.log.Printf("GetRow: SQL: %s", q)
 	err = d.queryJsonWriterRow(w, q, id)
 	if err != nil {
@@ -372,9 +419,11 @@ func (d *Database) Close() {
 	d.DB.Close()
 }
 
-func (d *Database) SanitiseSelectByTable(selectStr string, table string) ([]string, error) {
+// SanitiseSelectByTable takes a comma seperated list of fields, and returns an
+// array of ResultColumn's, removing any hidden fields
+func (d *Database) SanitiseSelectByTable(selectStr string, table string) (ResultColumns, error) {
 	invalidFields := []string{}
-	selectArray := []string{}
+	selectArray := make(ResultColumns, 0)
 
 	selectStr = strings.TrimSpace(selectStr)
 	if selectStr == "" || selectStr == "*" {
@@ -384,7 +433,7 @@ func (d *Database) SanitiseSelectByTable(selectStr string, table string) ([]stri
 		}
 		for _, f := range tableFields {
 			if d.IsFieldReadable(table, f.Name) {
-				selectArray = append(selectArray, f.Name)
+				selectArray = append(selectArray, ResultColumn{Table: table, Field: f.Name})
 			}
 		}
 	} else {
@@ -393,7 +442,7 @@ func (d *Database) SanitiseSelectByTable(selectStr string, table string) ([]stri
 			if !regName.MatchString(f) {
 				invalidFields = append(invalidFields, f)
 			} else if d.IsFieldReadable(table, f) {
-				selectArray = append(selectArray, f)
+				selectArray = append(selectArray, ResultColumn{Table: table, Field: f})
 			}
 		}
 	}

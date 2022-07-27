@@ -40,6 +40,40 @@ type Table struct {
 	Fields []Field `yaml:"fields"`
 }
 
+type Reference struct {
+	Table      string
+	KeyField   string
+	LabelField string
+}
+
+func NewReference(s string) (*Reference, error) {
+	r := regexRef.FindStringSubmatch(s)
+	if len(r) != 4 {
+		return nil, fmt.Errorf("invalid reference: '%s'", s)
+	}
+	return &Reference{
+		Table:      r[1],
+		KeyField:   r[2],
+		LabelField: r[3],
+	}, nil
+}
+
+func (r Reference) ResultColLabel(as string) ResultColumn {
+	return ResultColumn{
+		Table: r.Table,
+		Field: r.LabelField,
+		As:    as,
+	}
+}
+
+func (r Reference) ResultColKey(as string) ResultColumn {
+	return ResultColumn{
+		Table: r.Table,
+		Field: r.KeyField,
+		As:    as,
+	}
+}
+
 type Field struct {
 	// Database
 	Name       string      `yaml:"name" json:"-"`

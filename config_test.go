@@ -125,7 +125,6 @@ func TestConfigApply1234(t *testing.T) {
 	var err error
 	if true {
 		db, err = NewDatabase("file::memory:?cache=shared") // Log(log.Default()),
-
 	} else {
 		os.Remove("test.db")
 		db, err = NewDatabase("test.db")
