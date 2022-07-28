@@ -61,7 +61,7 @@ var OPT = &ConfigOptions{
 }
 
 func TestConfigApplyNew(t *testing.T) {
-	db, err := NewDatabase("file::memory:?cache=private")
+	db, err := NewDatabase("file::memory:")
 	assert.NoError(t, err)
 	defer db.Close()
 
@@ -90,7 +90,7 @@ func TestConfigApplyNew(t *testing.T) {
 }
 
 func TestConfigApplyRemoveTable(t *testing.T) {
-	db, err := NewDatabase("file::memory:?cache=private")
+	db, err := NewDatabase("file::memory:")
 	assert.NoError(t, err)
 	defer db.Close()
 
@@ -124,7 +124,7 @@ func TestConfigApply1234(t *testing.T) {
 	var db *Database
 	var err error
 	if true {
-		db, err = NewDatabase("file::memory:?cache=shared") // Log(log.Default()),
+		db, err = NewDatabase("file::memory:") // Log(log.Default()),
 	} else {
 		os.Remove("test.db")
 		db, err = NewDatabase("test.db")

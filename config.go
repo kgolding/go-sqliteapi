@@ -46,6 +46,9 @@ type Reference struct {
 	LabelField string
 }
 
+// https://regex101.com/r/wpohXh/1
+var regexRef = regexp.MustCompile(`(\w+)\.(\w+)\s*(?:[/\\]\s*(\w+\s*(?:,\s*\w+)*))?`)
+
 func NewReference(s string) (*Reference, error) {
 	r := regexRef.FindStringSubmatch(s)
 	if len(r) != 4 {
@@ -114,11 +117,12 @@ func (c *Config) String() string {
 			q = "Error: " + err.Error()
 		}
 
-		s += fmt.Sprintf("Table `%s`: SQL: %s\n", t.Name, q)
+		s += fmt.Sprintf("Table `%s`\n%s\n", t.Name, q)
 
 		a := make([][]string, 0)
 		a = append(a, []string{
 			"Name",
+			"PK",
 			"Label",
 			"Control",
 			"Readonly",
@@ -139,6 +143,7 @@ func (c *Config) String() string {
 			}
 			a = append(a, []string{
 				f.Name,
+				fmt.Sprintf("%d", f.PrimaryKey),
 				f.Label,
 				f.Control,
 				ro,
@@ -180,8 +185,6 @@ func tabular(input [][]string) string {
 	}
 	return s
 }
-
-var regexRef = regexp.MustCompile(`(?m)(\w+)\.(\w+)(?:[/\\](\w+))?`)
 
 func (table *Table) CreateSQL() (string, error) {
 	coldefs := []string{}
@@ -325,6 +328,9 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 						s = string(x)
 					case bool:
 						tf = x
+						if x {
+							i = 1
+						}
 					case int:
 						i = x
 					case int64:

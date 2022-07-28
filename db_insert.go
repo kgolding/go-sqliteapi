@@ -3,20 +3,22 @@ package gdb
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 )
 
-var ErrUnknownID = errors.New("unknown ID")
+var ErrUnknownKey = errors.New("unknown key")
 
 func (d *Database) insertMap(table string, data map[string]interface{}, user User) (int, error) {
 	logf := func(format string, args ...interface{}) {
 		d.log.Printf("insertMap: "+format, args...)
 	}
 
-	tableFields, err := d.CheckTableNameGetFields(table)
-	if err != nil {
-		logf("error fetching table info: %s", err)
-		return 0, err
+	// tableFields, err := d.CheckTableNameGetFields(table)
+	tableInfo := d.dbInfo.GetTableInfo(table)
+	if tableInfo == nil {
+		// logf("error fetching table info: %s", err)
+		return 0, fmt.Errorf("unknown table name '%s'", table)
 	}
 
 	ctx, _ := context.WithTimeout(context.Background(), d.timeout)
@@ -36,9 +38,12 @@ func (d *Database) insertMap(table string, data map[string]interface{}, user Use
 	fields := make([]string, 0)
 	values := make([]interface{}, 0)
 	for k, v := range data {
-		for _, f := range tableFields {
+		for _, f := range tableInfo.Fields {
 			if f.Name == k {
-				if f.PrimaryKey == 0 && d.IsFieldWritable(table, k) { // And are writable
+				if f.PrimaryKey > 0 && tableInfo.IsPrimaryKeyId {
+					continue // Do insert an autoinc value
+				}
+				if d.IsFieldWritable(table, k) { // And are writable
 					err = d.FieldValidation(table, k, v)
 					if err != nil {
 						return 0, err
@@ -154,13 +159,20 @@ func (d *Database) updateMap(table string, data map[string]interface{}, user Use
 	sql += " SET " + strings.Join(fields, "=?,") + "=?"
 	sql += " WHERE " + strings.Join(pks, "=? AND ") + "=?"
 
-	logf("SQL: %s", sql)
+	args := append(fieldValues, pkValues...)
 
-	_, err = tx.Exec(sql, append(fieldValues, pkValues...)...)
+	logf("SQL: %s\nArgs: %s", sql, args)
+
+	res, err := tx.Exec(sql, args...)
 	if err != nil {
 		logf("error executing sql: %s", err)
 		tx.Rollback()
 		return err
+	}
+	if i, _ := res.RowsAffected(); i != 1 {
+		logf("")
+		tx.Rollback()
+		return ErrUnknownKey
 	}
 
 	err = d.runHooks(table, HookParams{data, HookAfterUpdate, tx, user})
@@ -180,16 +192,16 @@ func (d *Database) updateMap(table string, data map[string]interface{}, user Use
 	return nil
 }
 
-func (d *Database) delete(table string, id int, user User) error {
+func (d *Database) delete(table string, key interface{}, user User) error {
 	logf := func(format string, args ...interface{}) {
 		d.log.Printf("updateMap: "+format, args...)
 	}
 
-	_, err := d.CheckTableNameGetFields(table)
-	if err != nil {
-		logf("error fetching table info: %s", err)
-		return err
+	tableInfo := d.dbInfo.GetTableInfo(table)
+	if tableInfo == nil {
+		return ErrUnknownKey
 	}
+
 	ctx, _ := context.WithTimeout(context.Background(), d.timeout)
 	tx, err := d.DB.BeginTxx(ctx, nil)
 	if err != nil {
@@ -197,34 +209,31 @@ func (d *Database) delete(table string, id int, user User) error {
 		return err
 	}
 
-	data := map[string]interface{}{
-		"id": id,
-	}
-	err = d.runHooks(table, HookParams{data, HookBeforeDelete, tx, user})
-	if err != nil {
-		logf("error running before hook: %s", err)
-		tx.Rollback()
-		return err
-	}
+	// err = d.runHooks(table, HookParams{data, HookBeforeDelete, tx, user})
+	// if err != nil {
+	// 	logf("error running before hook: %s", err)
+	// 	tx.Rollback()
+	// 	return err
+	// }
 
 	sql := "DELETE FROM `" + table + "`"
-	sql += " WHERE id=?"
+	sql += " WHERE " + tableInfo.GetPrimaryKey().Field + "=?"
 
 	logf("SQL: %s", sql)
 
-	res, err := tx.Exec(sql, id)
+	res, err := tx.Exec(sql, key)
 	if err != nil {
 		logf("error executing sql: %s", err)
 		tx.Rollback()
 		return err
 	}
 
-	err = d.runHooks(table, HookParams{data, HookAfterDelete, tx, user})
-	if err != nil {
-		logf("error running after hook: %s", err)
-		tx.Rollback()
-		return err
-	}
+	// err = d.runHooks(table, HookParams{data, HookAfterDelete, tx, user})
+	// if err != nil {
+	// 	logf("error running after hook: %s", err)
+	// 	tx.Rollback()
+	// 	return err
+	// }
 
 	err = tx.Commit()
 	if err != nil {
@@ -241,7 +250,7 @@ func (d *Database) delete(table string, id int, user User) error {
 	}
 
 	if v == 0 {
-		return ErrUnknownID
+		return ErrUnknownKey
 	}
 
 	return nil

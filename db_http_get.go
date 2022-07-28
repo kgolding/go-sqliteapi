@@ -6,8 +6,26 @@ import (
 	"errors"
 	"net/http"
 	"path"
+	"sort"
 	"strings"
 )
+
+type TableFieldInfoWithMetaData struct {
+	TableFieldInfo
+	Field
+}
+
+func (d *Database) GetObjects(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	ret := []string{}
+	for _, info := range d.dbInfo {
+		ret = append(ret, info.Name)
+	}
+	sort.Strings(ret)
+	enc := json.NewEncoder(w)
+	enc.Encode(ret)
+}
 
 func (d *Database) GetRow(w http.ResponseWriter, r *http.Request) {
 	bqc, err := BuildQueryConfigFromRequest(r, true)

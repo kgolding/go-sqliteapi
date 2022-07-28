@@ -2,6 +2,7 @@ package gdb
 
 import (
 	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"path"
 	"strconv"
@@ -32,4 +33,21 @@ func (d *Database) PostTable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Write([]byte(strconv.Itoa(id)))
+}
+
+func (d *Database) PostSQL(w http.ResponseWriter, r *http.Request) {
+	sql, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// @TODO Restrict/Sanitise SQL ?
+
+	w.Header().Set("Content-Type", "application/json")
+	err = d.QueryJsonWriter(w, string(sql), nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 }

@@ -8,9 +8,10 @@ import (
 type TableInfos map[string]TableInfo
 
 type TableInfo struct {
-	Name   string           `json:"name"`
-	IsView bool             `json:"isView"`
-	Fields []TableFieldInfo `json:"fields"`
+	Name           string           `json:"name"`
+	IsView         bool             `json:"isView"`
+	Fields         []TableFieldInfo `json:"fields"`
+	IsPrimaryKeyId bool             `json:"isPkId"`
 }
 
 type TableFieldInfo struct {
@@ -108,6 +109,9 @@ func (d *Database) Refresh() error {
 			err = frows.Scan(&cid, &f.Name, &f.Type, &f.NotNull, &f.DefaultValue, &f.PrimaryKey)
 			if err != nil {
 				return err
+			}
+			if f.Name == "id" && f.PrimaryKey > 0 {
+				table.IsPrimaryKeyId = true
 			}
 			f.Type = strings.ToLower(f.Type)
 			f.DefaultValue = removeQuotesIfString(f.DefaultValue)

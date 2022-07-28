@@ -8,7 +8,9 @@ import (
 	"io"
 )
 
-func (d *Database) QueryJsonArrayWriter(w io.Writer, query string, args ...interface{}) error {
+// queryJsonArrayWriter runs the query and streams the result as a json array or arrays
+// to the given Writer
+func (d *Database) QueryJsonArrayWriter(w io.Writer, query string, args []interface{}) error {
 	tx, err := d.DB.Beginx()
 	if err != nil {
 		return err
@@ -165,46 +167,3 @@ func (d *Database) queryJsonWriterRow(w io.Writer, query string, args []interfac
 	w.Write(b)
 	return nil
 }
-
-// queryWriter runs the query returns the result
-// func (d *Database) QueryRow(query string, args ...interface{}) (map[string]interface{}, error) {
-// 	rows, err := d.DB.Query(query, args...)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	defer rows.Close()
-// 	if rows.Next() {
-// 		// figure out what columns were returned
-// 		// the column names will be the JSON object field keys
-// 		columns, err := rows.ColumnTypes()
-// 		if err != nil {
-// 			return nil, err
-// 		}
-
-// 		// Scan needs an array of pointers to the values it is setting
-// 		// This creates the object and sets the values correctly
-// 		values := make([]interface{}, len(columns))
-// 		object := map[string]interface{}{}
-// 		for i, column := range columns {
-// 			v := new(interface{})
-// 			scanType := column.ScanType()
-// 			if scanType != nil { // Deal with null values
-// 				if t := reflect.New(scanType).Interface(); t != nil {
-// 					v = &t
-// 				}
-// 			}
-// 			object[column.Name()] = v
-// 			values[i] = object[column.Name()]
-// 		}
-
-// 		err = rows.Scan(values...)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-
-// 		return object, nil
-
-// 	}
-
-// 	return nil, sql.ErrNoRows
-// }

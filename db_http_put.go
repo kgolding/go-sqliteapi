@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"path"
-	"strconv"
 )
 
 func (d *Database) PutRow(w http.ResponseWriter, r *http.Request) {
@@ -14,15 +13,17 @@ func (d *Database) PutRow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := strconv.Atoi(path.Base(r.URL.Path))
-	if err != nil {
-		http.Error(w, "invalid row ID", http.StatusBadRequest)
+	tableInfo := d.dbInfo.GetTableInfo(table)
+	if tableInfo == nil {
+		http.Error(w, "unknown table/view", http.StatusBadRequest)
 		return
 	}
 
+	key := path.Base(r.URL.Path)
+
 	dec := json.NewDecoder(r.Body)
 	data := make(map[string]interface{})
-	err = dec.Decode(&data)
+	err := dec.Decode(&data)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
@@ -30,7 +31,7 @@ func (d *Database) PutRow(w http.ResponseWriter, r *http.Request) {
 	}
 	// @TODO Should I check the data id?
 
-	data["id"] = id
+	data[tableInfo.GetPrimaryKey().Field] = key
 
 	// user := auth.GetUser(r)
 	var user User // BLANK USER

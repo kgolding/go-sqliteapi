@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 	"path"
-	"strconv"
 )
 
 func (d *Database) DelRow(w http.ResponseWriter, r *http.Request) {
@@ -14,18 +13,14 @@ func (d *Database) DelRow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := strconv.Atoi(path.Base(r.URL.Path))
-	if err != nil {
-		http.Error(w, "invalid row ID", http.StatusBadRequest)
-		return
-	}
+	key := path.Base(r.URL.Path)
 
 	// user := auth.GetUser(r)
 	var user User // BLANK USER
 
-	err = d.delete(table, id, user)
+	err := d.delete(table, key, user)
 	if err != nil {
-		if errors.Is(err, ErrUnknownID) {
+		if errors.Is(err, ErrUnknownKey) {
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusBadRequest)

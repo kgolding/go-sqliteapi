@@ -18,6 +18,7 @@ type BuildQueryConfig struct {
 	Limit     uint
 }
 
+// BuildQueryConfigFromRequest
 func BuildQueryConfigFromRequest(r *http.Request, withKey bool) (BuildQueryConfig, error) {
 
 	GetQueryUint := func(param string, defValue uint) (uint, error) {
@@ -61,6 +62,7 @@ func BuildQueryConfigFromRequest(r *http.Request, withKey bool) (BuildQueryConfi
 	return bqc, nil
 }
 
+// BuildQuery takes a BuildQueryConfig and returns a raw SQL query and an array of args
 func (d *Database) BuildQuery(c BuildQueryConfig) (string, []interface{}, error) {
 
 	if !regName.MatchString(c.Table) {
@@ -135,4 +137,40 @@ func (d *Database) BuildQuery(c BuildQueryConfig) (string, []interface{}, error)
 	}
 
 	return q, args, nil
+}
+
+// SanitiseSelectByTable takes a comma seperated list of fields, and returns an
+// array of ResultColumn's, removing any hidden fields
+func (d *Database) SanitiseSelectByTable(selectStr string, table string) (ResultColumns, error) {
+	invalidFields := []string{}
+	selectArray := make(ResultColumns, 0)
+
+	selectStr = strings.TrimSpace(selectStr)
+	if selectStr == "" || selectStr == "*" {
+		tableFields, err := d.CheckTableNameGetFields(table)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range tableFields {
+			if d.IsFieldReadable(table, f.Name) {
+				selectArray = append(selectArray, ResultColumn{Table: table, Field: f.Name})
+			}
+		}
+	} else {
+		for _, f := range strings.Split(selectStr, ",") {
+			f = strings.TrimSpace(f)
+			if !regName.MatchString(f) {
+				invalidFields = append(invalidFields, f)
+			} else if d.IsFieldReadable(table, f) {
+				selectArray = append(selectArray, ResultColumn{Table: table, Field: f})
+			}
+		}
+	}
+	if len(invalidFields) > 0 {
+		return selectArray, fmt.Errorf("invalid field(s): %s", strings.Join(invalidFields, ", "))
+	}
+	if len(selectArray) == 0 {
+		return selectArray, fmt.Errorf("no valid fields")
+	}
+	return selectArray, nil
 }
