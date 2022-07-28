@@ -129,7 +129,7 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 
 		} else { // MODIFY TABLE
 			change := false
-			// Check no change, same number of fields, all fields the same
+			// Check no change, same number of fields & all fields the same
 			if len(ot.Fields) == len(table.Fields) {
 				for i, of := range ot.Fields {
 					nf := table.Fields[i].applySpecialFields()

@@ -47,7 +47,7 @@ tables:
 func GetConfig2(t *testing.T) *Config {
 	config1 := GetConfig1(t)
 	var config2 = &Config{
-		Tables: []Table{
+		Tables: []ConfigTable{
 			config1.Tables[0],
 		},
 	}
@@ -209,48 +209,11 @@ func TestParseYaml(t *testing.T) {
 	// assert.True(t, c.Tables["slideshow"]["title"].NotNull)
 }
 
-// var config1 = Config{
-// 	Tables: []Table{
-// 		{
-// 			Name: "table1",
-// 			Fields: []Field{
-// 				{Name: "id"},
-// 				{Name: "createdAt"},
-// 				{
-// 					Name:   "title",
-// 					Type:   TypeText,
-// 					Label:  "Title",
-// 					Min:    3,
-// 					Max:    24,
-// 					RegExp: "[a-z].*",
-// 				},
-// 			},
-// 		},
-// 		{
-// 			Name: "table2",
-// 			Fields: []Field{
-// 				{Name: "id"},
-// 				{
-// 					Name:       "t1Id",
-// 					Label:      "Table 1 reference",
-// 					References: "table1.id",
-// 				},
-// 			},
-// 		},
-// 	},
-// }
-
-// var config2 = Config{
-// 	Tables: []Table{
-// 		config1.Tables[0],
-// 	},
-// }
-
 var config3 = Config{
-	Tables: []Table{
+	Tables: []ConfigTable{
 		{
 			Name: "table1",
-			Fields: []Field{
+			Fields: []ConfigField{
 				{Name: "id"},
 				{Name: "createdAt"},
 				{
@@ -273,10 +236,10 @@ var config3 = Config{
 }
 
 var config4 = Config{
-	Tables: []Table{
+	Tables: []ConfigTable{
 		{
 			Name: "table1",
-			Fields: []Field{
+			Fields: []ConfigField{
 				{Name: "id"},
 				{Name: "createdAt"},
 				{

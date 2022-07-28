@@ -8,7 +8,7 @@ import (
 	"io"
 )
 
-// queryJsonArrayWriter runs the query and streams the result as a json array or arrays
+// queryJsonArrayWriter runs the query and streams the result as a json array of arrays
 // to the given Writer
 func (d *Database) QueryJsonArrayWriter(w io.Writer, query string, args []interface{}) error {
 	tx, err := d.DB.Beginx()
@@ -119,7 +119,6 @@ func (d *Database) QueryCsvWriter(w io.Writer, query string, args []interface{})
 		if err != nil {
 			return err
 		}
-		// d.removeSecretFields(ret)
 
 		row := []string{}
 		for _, c := range cols {

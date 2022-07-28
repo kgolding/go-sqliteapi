@@ -32,12 +32,12 @@ const (
 )
 
 type Config struct {
-	Tables []Table `yaml:"tables,omitempty"`
+	Tables []ConfigTable `yaml:"tables,omitempty"`
 }
 
-type Table struct {
-	Name   string  `yaml:"name"`
-	Fields []Field `yaml:"fields"`
+type ConfigTable struct {
+	Name   string        `yaml:"name"`
+	Fields []ConfigField `yaml:"fields"`
 }
 
 type Reference struct {
@@ -77,7 +77,7 @@ func (r Reference) ResultColKey(as string) ResultColumn {
 	}
 }
 
-type Field struct {
+type ConfigField struct {
 	// Database
 	Name       string      `yaml:"name" json:"-"`
 	Type       string      `yaml:"type,omitempty" json:"-"`
@@ -181,7 +181,7 @@ func tabular(input [][]string) string {
 	return s
 }
 
-func (table *Table) CreateSQL() (string, error) {
+func (table *ConfigTable) CreateSQL() (string, error) {
 	coldefs := []string{}
 	forkeys := []string{}
 	for _, f := range table.Fields {
@@ -207,7 +207,7 @@ func (table *Table) CreateSQL() (string, error) {
 	return sql, nil
 }
 
-func (a *Field) CompareDbFields(b *TableFieldInfo) error {
+func (a *ConfigField) CompareDbFields(b *TableFieldInfo) error {
 	if a.Name != b.Name {
 		return fmt.Errorf("name: '%s' != '%s'", a.Name, b.Name)
 	}
@@ -226,7 +226,7 @@ func (a *Field) CompareDbFields(b *TableFieldInfo) error {
 	return nil
 }
 
-func (f *Field) ColDef() (string, error) {
+func (f *ConfigField) ColDef() (string, error) {
 
 	lf := f.applySpecialFields()
 
@@ -252,7 +252,7 @@ func (f *Field) ColDef() (string, error) {
 	return s, nil
 }
 
-func (f Field) applySpecialFields() Field {
+func (f ConfigField) applySpecialFields() ConfigField {
 	if sf, ok := SpecialFields[f.Name]; ok {
 		f.Type = sf.Type
 		f.NotNull = sf.NotNull
@@ -262,7 +262,7 @@ func (f Field) applySpecialFields() Field {
 	return f
 }
 
-func (c *Config) GetTable(name string) *Table {
+func (c *Config) GetTable(name string) *ConfigTable {
 	if c == nil {
 		return nil
 	}
@@ -275,7 +275,7 @@ func (c *Config) GetTable(name string) *Table {
 }
 
 func NewConfigFromYaml(b []byte) (*Config, error) {
-	type Fields map[string]Field
+	type Fields map[string]ConfigField
 
 	var c struct {
 		Tables map[string]yaml.MapSlice
@@ -288,11 +288,11 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 	cfg := &Config{}
 
 	for tableName, fields := range c.Tables {
-		t := Table{
+		t := ConfigTable{
 			Name: tableName,
 		}
 		for _, x := range fields {
-			f := Field{ // Defaults
+			f := ConfigField{ // Defaults
 				Type: "text",
 			}
 

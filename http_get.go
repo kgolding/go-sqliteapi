@@ -10,12 +10,7 @@ import (
 	"strings"
 )
 
-type TableFieldInfoWithMetaData struct {
-	TableFieldInfo
-	Field
-}
-
-func (d *Database) GetObjects(w http.ResponseWriter, r *http.Request) {
+func (d *Database) GetTableNames(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	ret := []string{}
@@ -75,7 +70,7 @@ func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {
 
 	d.log.Printf("GetRow: SQL:\n%s\nArgs: %s", q, args)
 
-	// Change this to use Content-Type
+	// @TODO Maybe change this to use Content-Type ?
 	switch strings.ToLower(r.URL.Query().Get("format")) {
 	case "csv":
 		if fname := r.URL.Query().Get("filename"); fname != "" {
@@ -100,6 +95,11 @@ func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type TableFieldInfoWithMetaData struct {
+	TableFieldInfo
+	ConfigField
+}
+
 func (d *Database) GetRowsInfo(w http.ResponseWriter, r *http.Request) {
 	table := path.Base(r.URL.Path)
 	tableInfo, ok := d.dbInfo[table]
@@ -118,7 +118,7 @@ func (d *Database) GetRowsInfo(w http.ResponseWriter, r *http.Request) {
 		if ct != nil {
 			for _, ctf := range ct.Fields {
 				if ctf.Name == tf.Name {
-					x.Field = ctf
+					x.ConfigField = ctf
 				}
 			}
 
