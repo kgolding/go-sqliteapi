@@ -102,17 +102,16 @@ func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {
 
 func (d *Database) GetRowsInfo(w http.ResponseWriter, r *http.Request) {
 	table := path.Base(r.URL.Path)
-	tableFields, err := d.CheckTableNameGetFields(table)
-	if err != nil {
-		d.log.Printf("GetRows: error fetching table info: %s", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	tableInfo, ok := d.dbInfo[table]
+	if !ok {
+		http.Error(w, ErrUnknownTable.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Get the actual database info from dbinfo, and then add the extra info from config
 	ct := d.config.GetTable(table)
 	ret := make([]TableFieldInfoWithMetaData, 0)
-	for _, tf := range tableFields {
+	for _, tf := range tableInfo.Fields {
 		x := TableFieldInfoWithMetaData{
 			TableFieldInfo: tf,
 		}

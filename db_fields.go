@@ -17,19 +17,6 @@ const (
 	CONTROL_RADIO    = "radio"  // Requires options and/or LookupUri
 )
 
-type SelectOption struct {
-	Key   interface{} `json:"k"`
-	Value interface{} `json:"v"`
-}
-
-func (d *Database) CheckTableNameGetFields(table string) ([]TableFieldInfo, error) {
-	info, ok := d.dbInfo[table]
-	if !ok {
-		return nil, fmt.Errorf("invalid table name '%s'", table)
-	}
-	return info.Fields, nil
-}
-
 func (d *Database) FieldValidation(table string, field string, value interface{}) error {
 	if d.config == nil {
 		return nil
@@ -121,6 +108,7 @@ func (d *Database) IsFieldReadable(table string, field string) bool {
 
 	for _, tf := range t.Fields {
 		if tf.Name == field {
+			// Primary keys are always readable
 			return tf.PrimaryKey > 0 || !tf.Hidden
 		}
 	}

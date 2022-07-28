@@ -8,6 +8,7 @@ import (
 )
 
 var ErrUnknownKey = errors.New("unknown key")
+var ErrUnknownTable = errors.New("unknown table/view")
 
 func (d *Database) insertMap(table string, data map[string]interface{}, user User) (int, error) {
 	logf := func(format string, args ...interface{}) {
@@ -103,10 +104,9 @@ func (d *Database) updateMap(table string, data map[string]interface{}, user Use
 		d.log.Printf("updateMap: "+format, args...)
 	}
 
-	tableFields, err := d.CheckTableNameGetFields(table)
-	if err != nil {
-		logf("error fetching table info: %s", err)
-		return err
+	tableInfo, ok := d.dbInfo[table]
+	if !ok {
+		return ErrUnknownTable
 	}
 
 	ctx, _ := context.WithTimeout(context.Background(), d.timeout)
@@ -128,7 +128,7 @@ func (d *Database) updateMap(table string, data map[string]interface{}, user Use
 	fieldValues := []interface{}{} // The values to fill in the ?'s
 	pkValues := []interface{}{}    // The values to fill in the ?'s
 	for k, v := range data {
-		for _, tf := range tableFields {
+		for _, tf := range tableInfo.Fields {
 			if tf.Name == k {
 				// if tf, ok := tableFields[k]; ok { // Only save fields that exist in the table
 				if tf.PrimaryKey > 0 {

@@ -147,11 +147,11 @@ func (d *Database) SanitiseSelectByTable(selectStr string, table string) (Result
 
 	selectStr = strings.TrimSpace(selectStr)
 	if selectStr == "" || selectStr == "*" {
-		tableFields, err := d.CheckTableNameGetFields(table)
-		if err != nil {
-			return nil, err
+		tableInfo, ok := d.dbInfo[table]
+		if !ok {
+			return nil, ErrUnknownTable
 		}
-		for _, f := range tableFields {
+		for _, f := range tableInfo.Fields {
 			if d.IsFieldReadable(table, f.Name) {
 				selectArray = append(selectArray, ResultColumn{Table: table, Field: f.Name})
 			}
