@@ -15,22 +15,24 @@ import (
 var regName = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
 
 type Database struct {
-	DB      *sqlx.DB
-	log     SimpleLogger
-	hooks   []Hook
-	dbInfo  TableInfos
-	config  *Config
-	timeout time.Duration
+	DB       *sqlx.DB
+	log      SimpleLogger
+	debugLog SimpleLogger
+	hooks    []Hook
+	dbInfo   TableInfos
+	config   *Config
+	timeout  time.Duration
 	sync.Mutex
 }
 
 func NewDatabase(file string, opts ...Option) (*Database, error) {
 	var err error
 	d := &Database{
-		log:     log.New(ioutil.Discard, "", 0),
-		hooks:   make([]Hook, 0),
-		dbInfo:  make(TableInfos),
-		timeout: time.Second * 30,
+		log:      log.New(ioutil.Discard, "", 0),
+		debugLog: log.New(ioutil.Discard, "", 0),
+		hooks:    make([]Hook, 0),
+		dbInfo:   make(TableInfos),
+		timeout:  time.Second * 30,
 	}
 	d.DB, err = sqlx.Open("sqlite3", file)
 	if err != nil {

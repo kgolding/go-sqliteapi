@@ -36,7 +36,7 @@ func (d *Database) GetRow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	d.log.Printf("GetRow: SQL:\n%s\nArgs: %s", q, args)
+	d.debugLog.Printf("GetRow: SQL:\n%s\nArgs: %s", q, args)
 
 	err = d.queryJsonWriterRow(w, q, args)
 	if err != nil {
@@ -68,7 +68,7 @@ func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	d.log.Printf("GetRow: SQL:\n%s\nArgs: %s", q, args)
+	d.debugLog.Printf("GetRow: SQL:\n%s\nArgs: %s", q, args)
 
 	// @TODO Maybe change this to use Content-Type ?
 	switch strings.ToLower(r.URL.Query().Get("format")) {

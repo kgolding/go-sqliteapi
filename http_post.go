@@ -33,6 +33,8 @@ func (d *Database) PostTable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Write([]byte(strconv.Itoa(id)))
+
+	d.log.Printf("%s: Create row %d", table, id)
 }
 
 func (d *Database) PostSQL(w http.ResponseWriter, r *http.Request) {

@@ -41,4 +41,6 @@ func (d *Database) PutRow(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	d.log.Printf("%s: Updated row where %s = '%v'", table, tableInfo.GetPrimaryKey().Field, key)
 }

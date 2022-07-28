@@ -28,7 +28,7 @@ func YamlConfig(b []byte) Option {
 		if err != nil {
 			return err
 		}
-		d.log.Println("Config:\n" + c.String())
+		d.debugLog.Println("Config:\n" + c.String())
 		d.config = c
 		return nil
 	}
@@ -42,6 +42,16 @@ type SimpleLogger interface {
 func Log(logger SimpleLogger) Option {
 	return func(d *Database) error {
 		d.log = logger
+		return nil
+	}
+}
+
+func DebugLog(logger SimpleLogger) Option {
+	return func(d *Database) error {
+		d.debugLog = logger
+		if d.log == nil {
+			d.log = logger
+		}
 		return nil
 	}
 }

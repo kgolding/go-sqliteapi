@@ -1,6 +1,7 @@
 package gdb
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"database/sql"
 	"fmt"
@@ -45,7 +46,7 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 	}
 
 	debugf := func(format string, args ...interface{}) {
-		d.log.Printf("ApplyConfig: "+format, args...)
+		d.debugLog.Printf("ApplyConfig: "+format, args...)
 	}
 
 	debugf("dbInfo: %+v\n", d.dbInfo)
@@ -64,7 +65,7 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 	noChanges := true
 
 	defer func() {
-		if err != nil || noChanges {
+		if err != nil {
 			tx.Rollback()
 			return
 		} else {
@@ -250,15 +251,21 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 		}
 	}
 
-	if noChanges {
-		debugf("No changes :)")
-		err = nil
-		return
-	}
-
 	b, err := yaml.Marshal(c)
 	if err != nil {
 		return
+	}
+
+	if noChanges {
+		debugf("No schema changes :)")
+		err = nil
+		// Compare with previous config
+		var oldYaml []byte
+		err = d.DB.Get(&oldYaml, "SELECT config FROM gdb_config ORDER BY id DESC LIMIT 1")
+		if err != nil || bytes.Compare(b, oldYaml) == 0 {
+			// No need to save the config
+			return
+		}
 	}
 
 	h := sha256.New()
@@ -273,7 +280,11 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 	version, _ := res.LastInsertId()
 	tx.Exec(fmt.Sprintf("PRAGMA user_version=%d", version))
 
-	debugf("Success, version is now %d:\n%s", version, c)
+	if noChanges {
+		d.log.Printf("Database version is now %d (no schema changes)", version)
+	} else {
+		d.log.Printf("Database version is now %d (schema has changed)", version)
+	}
 
 	d.config = c
 

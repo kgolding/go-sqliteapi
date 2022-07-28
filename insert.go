@@ -12,7 +12,7 @@ var ErrUnknownTable = errors.New("unknown table/view")
 
 func (d *Database) insertMap(table string, data map[string]interface{}, user User) (int, error) {
 	logf := func(format string, args ...interface{}) {
-		d.log.Printf("insertMap: "+format, args...)
+		d.debugLog.Printf("insertMap: "+format, args...)
 	}
 
 	// tableFields, err := d.CheckTableNameGetFields(table)
@@ -194,7 +194,7 @@ func (d *Database) updateMap(table string, data map[string]interface{}, user Use
 
 func (d *Database) delete(table string, key interface{}, user User) error {
 	logf := func(format string, args ...interface{}) {
-		d.log.Printf("updateMap: "+format, args...)
+		d.debugLog.Printf("updateMap: "+format, args...)
 	}
 
 	tableInfo := d.dbInfo.GetTableInfo(table)
@@ -252,6 +252,8 @@ func (d *Database) delete(table string, key interface{}, user User) error {
 	if v == 0 {
 		return ErrUnknownKey
 	}
+
+	d.log.Printf("%s: Delete row where %s = '%v'", table, tableInfo.GetPrimaryKey().Field, key)
 
 	return nil
 }

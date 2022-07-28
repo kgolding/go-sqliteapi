@@ -3,6 +3,7 @@ package gdb
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"os"
 	"testing"
 
@@ -11,7 +12,8 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	db, err := NewDatabase("file::memory:?cache=shared")
+	db, err := NewDatabase("file::memory:?cache=shared",
+		Log(log.Default()))
 	assert.NoError(t, err)
 	// if err != nil {
 	// 	t.Fatal(err)
@@ -27,7 +29,8 @@ func TestNew(t *testing.T) {
 }
 
 func TestJoin(t *testing.T) {
-	db, err := NewDatabase("file::memory:")
+	db, err := NewDatabase("file::memory:",
+		Log(log.Default()))
 	assert.NoError(t, err)
 	defer db.Close()
 
@@ -75,7 +78,8 @@ func TestJoin(t *testing.T) {
 }
 
 func TestJoinMultipleLabels(t *testing.T) {
-	db, err := NewDatabase("file::memory:")
+	db, err := NewDatabase("file::memory:",
+		Log(log.Default()))
 	assert.NoError(t, err)
 	defer db.Close()
 
@@ -123,7 +127,8 @@ func TestJoinMultipleLabels(t *testing.T) {
 }
 
 func TestBackup(t *testing.T) {
-	db, err := NewDatabase("file::memory:?cache=shared")
+	db, err := NewDatabase("file::memory:?cache=shared",
+		Log(log.Default()))
 	assert.NoError(t, err)
 	defer db.Close()
 
@@ -171,7 +176,8 @@ tables:
       ref: table1.oid/text
 `
 	db, err := NewDatabase("file::memory:?cache=shared",
-		YamlConfig([]byte(yaml)))
+		YamlConfig([]byte(yaml)),
+		Log(log.Default()))
 	assert.NoError(t, err)
 	defer db.Close()
 

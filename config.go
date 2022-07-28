@@ -3,6 +3,7 @@ package gdb
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -381,6 +382,10 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 		}
 		cfg.Tables = append(cfg.Tables, t)
 	}
+
+	sort.Slice(cfg.Tables, func(a, b int) bool {
+		return cfg.Tables[a].Name < cfg.Tables[b].Name
+	})
 
 	return cfg, nil
 }
