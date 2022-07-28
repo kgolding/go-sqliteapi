@@ -1,6 +1,7 @@
 package gdb
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"testing"
@@ -57,12 +58,20 @@ func TestJoin(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = db.insertMap("t1", map[string]interface{}{"name": "T1 Row 2"}, nil)
 	assert.NoError(t, err)
-	_, err = db.insertMap("t2", map[string]interface{}{"name": "T2 Row 1", "t1Id": 1}, nil)
+	t2r1Id, err := db.insertMap("t2", map[string]interface{}{"name": "T2 Row 1", "t1Id": 1}, nil)
 	assert.NoError(t, err)
 
-	// @TODO do a join
-	assert.NotNil(t, nil, "@TODO")
+	// Get t2 row joined with t1 and check t1 name is in the result
+	bcq := BuildQueryConfig{
+		Table: "t2",
+		Key:   fmt.Sprintf("%d", t2r1Id),
+	}
+	q, args, err := db.BuildQuery(bcq)
+	assert.NoError(t, err)
 
+	var b bytes.Buffer
+	assert.NoError(t, db.queryJsonWriterRow(&b, q, args))
+	assert.Contains(t, b.String(), "T1 Row 1")
 }
 
 func TestBackup(t *testing.T) {

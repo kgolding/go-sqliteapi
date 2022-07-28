@@ -23,7 +23,7 @@ func (d *Database) GetRow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	d.log.Printf("GetRow: SQL: %s [%s]", q, args)
+	d.log.Printf("GetRow: SQL:\n%s\nArgs: %s", q, args)
 
 	err = d.queryJsonWriterRow(w, q, args)
 	if err != nil {
@@ -55,7 +55,7 @@ func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	d.log.Printf("GetRows: SQL: %s [%s]", q, args)
+	d.log.Printf("GetRow: SQL:\n%s\nArgs: %s", q, args)
 
 	// Change this to use Content-Type
 	switch strings.ToLower(r.URL.Query().Get("format")) {

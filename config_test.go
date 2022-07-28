@@ -134,7 +134,7 @@ func TestConfigApply1234(t *testing.T) {
 
 	assert.Len(t, db.dbInfo, 0)
 
-	t.Log(">>>>>>>>>>>>> Config 1")
+	// t.Log(">>>>>>>>>>>>> Config 1")
 	config1 := GetConfig1(t)
 	assert.NoError(t, db.ApplyConfig(config1, OPT))
 	assert.NoError(t, InsertTable1Data(db))
@@ -147,19 +147,19 @@ func TestConfigApply1234(t *testing.T) {
 	_, err = db.DB.Exec("INSERT INTO table2 (t1Id) VALUES (9999999)") // Should fail
 	assert.Error(t, err)
 
-	t.Log(">>>>>>>>>>>>> Config 2")
+	// t.Log(">>>>>>>>>>>>> Config 2")
 	config2 := GetConfig2(t)
 	assert.NoError(t, db.ApplyConfig(config2, OPT))
 	assert.NoError(t, db.Refresh())
 	assert.Len(t, db.dbInfo, 1)
 
-	t.Log(">>>>>>>>>>>>> Config 3")
+	// t.Log(">>>>>>>>>>>>> Config 3")
 	assert.NoError(t, db.ApplyConfig(&config3, OPT))
 	assert.NoError(t, db.Refresh())
 	assert.Len(t, db.dbInfo, 1)
 	assert.Len(t, db.dbInfo[config3.Tables[0].Name].Fields, 4)
 
-	t.Log(">>>>>>>>>>>>> Config 4")
+	// t.Log(">>>>>>>>>>>>> Config 4")
 	assert.True(t, config4.Tables[0].Fields[2].NotNull)
 	assert.NoError(t, db.ApplyConfig(&config4, OPT))
 	assert.NoError(t, db.Refresh())
