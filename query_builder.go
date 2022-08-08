@@ -9,17 +9,25 @@ import (
 )
 
 type BuildQueryConfig struct {
-	Table     string
-	Key       string // Optional
-	FieldsCSV string
-	Search    string
-	Sort      string
-	Offset    uint
-	Limit     uint
+	Table            string
+	PkValue          interface{} // Optional
+	FieldsCSV        string
+	Search           string
+	Sort             string
+	Offset           uint
+	Limit            uint
+	IncludeJunctions bool
+	SubQueries       []SubQuery
+}
+
+type SubQuery struct {
+	Name      string
+	Query     string
+	ArgFields []string
 }
 
 // BuildQueryConfigFromRequest
-func BuildQueryConfigFromRequest(r *http.Request, withKey bool) (BuildQueryConfig, error) {
+func BuildQueryConfigFromRequest(r *http.Request, withKey bool) (*BuildQueryConfig, error) {
 
 	GetQueryUint := func(param string, defValue uint) (uint, error) {
 		if v := r.URL.Query().Get(param); v != "" {
@@ -37,15 +45,17 @@ func BuildQueryConfigFromRequest(r *http.Request, withKey bool) (BuildQueryConfi
 
 	var err error
 
-	bqc := BuildQueryConfig{
-		FieldsCSV: r.URL.Query().Get("select"),
-		Search:    r.URL.Query().Get("search"),
-		Sort:      r.URL.Query().Get("sort"),
+	bqc := &BuildQueryConfig{
+		FieldsCSV:        r.URL.Query().Get("select"),
+		Search:           r.URL.Query().Get("search"),
+		Sort:             r.URL.Query().Get("sort"),
+		IncludeJunctions: r.URL.Query().Has("junctions"),
+		SubQueries:       make([]SubQuery, 0),
 	}
 
 	bqc.Table = path.Base(r.URL.Path)
 	if withKey {
-		bqc.Key = bqc.Table
+		bqc.PkValue = bqc.Table
 		bqc.Table = path.Base(path.Dir(r.URL.Path))
 	}
 
@@ -63,7 +73,7 @@ func BuildQueryConfigFromRequest(r *http.Request, withKey bool) (BuildQueryConfi
 }
 
 // BuildQuery takes a BuildQueryConfig and returns a raw SQL query and an array of args
-func (d *Database) BuildQuery(c BuildQueryConfig) (string, []interface{}, error) {
+func (d *Database) BuildQuery(c *BuildQueryConfig) (string, []interface{}, error) {
 
 	if !regName.MatchString(c.Table) {
 		return "", nil, fmt.Errorf("invalid table name '%s'", c.Table)
@@ -78,17 +88,40 @@ func (d *Database) BuildQuery(c BuildQueryConfig) (string, []interface{}, error)
 
 	// Add joins, relies on config existing to get field refs
 	if d.config != nil {
+		// Get labels for fields that have references
 		if ct := d.config.GetTable(c.Table); ct != nil {
 			for _, rc := range resultCols {
 				for _, f := range ct.Fields {
 					if rc.Field == f.Name && f.References != "" {
 						ref, err := NewReference(f.References)
-						if err == nil {
+						if err == nil && ref.LabelField != "" {
 							resultCols = append(resultCols, ref.ResultColLabel(rc.Field+"_RefLabel"))
 							joins = append(joins, fmt.Sprintf(
 								"LEFT OUTER JOIN `%s` ON %s = %s",
 								ref.Table, ref.ResultColKey("").String(), rc.String()))
 						}
+					}
+				}
+			}
+		}
+		if c.IncludeJunctions {
+			// Get id's of junction tables by looking for other tables with references back to our main table
+			for _, t := range d.config.Tables {
+				for _, f := range t.Fields {
+					if strings.HasPrefix(f.References, c.Table+".") {
+						ref, err := NewReference(f.References)
+						if err != nil {
+							continue
+						}
+
+						// @TODO ADD _RefLabels
+
+						sq := SubQuery{
+							Name:      t.Name,
+							Query:     "SELECT * FROM `" + t.Name + "` WHERE `" + f.Name + "`=?",
+							ArgFields: []string{ref.KeyField},
+						}
+						c.SubQueries = append(c.SubQueries, sq)
 					}
 				}
 			}
@@ -105,10 +138,10 @@ func (d *Database) BuildQuery(c BuildQueryConfig) (string, []interface{}, error)
 	}
 
 	// WHERE
-	if c.Key != "" {
+	if c.PkValue != nil {
 		if ti := d.dbInfo.GetTableInfo(c.Table); ti != nil {
 			q += "\n\tWHERE " + ti.GetPrimaryKey().String() + " = ?"
-			args = append(args, c.Key)
+			args = append(args, c.PkValue)
 		}
 	} else {
 		if c.Search != "" {

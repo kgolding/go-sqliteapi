@@ -10,11 +10,16 @@ import (
 type ResultColumn struct {
 	Table string
 	Field string
+	Expr  string
 	As    string
 }
 
 // String returns a fully qualified string e.g. `table1`.`field1`
+// Including concating comma seperated fields
 func (rc ResultColumn) String() string {
+	if rc.Expr != "" {
+		return rc.Expr
+	}
 	fields := strings.Split(rc.Field, ",")
 	s := []string{}
 	for _, f := range fields {

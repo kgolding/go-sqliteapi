@@ -2,7 +2,6 @@ package gdb
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"testing"
 
@@ -57,7 +56,6 @@ func GetConfig2(t *testing.T) *Config {
 var OPT = &ConfigOptions{
 	RetainUnmanaged: false,
 	DryRun:          false,
-	Logger:          log.Default(),
 }
 
 func TestConfigApplyNew(t *testing.T) {

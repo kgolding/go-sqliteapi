@@ -5,19 +5,19 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
 	"gopkg.in/yaml.v2"
 )
 
-const ConfigCreateSql = `CREATE TABLE IF NOT EXISTS "gdb_config" (
+const ConfigCreateSql = `
+CREATE TABLE IF NOT EXISTS "gdb_config" (
 	"id"			INTEGER	PRIMARY KEY AUTOINCREMENT,
 	"createdAt"	DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	"config"		TEXT NOT NULL,
 	"hash"		TEXT NOT NULL
-	);`
+);`
 
 type GdbConfigRow struct {
 	ID        int       `db:"id"`
@@ -28,20 +28,27 @@ type GdbConfigRow struct {
 
 type ConfigOptions struct {
 	RetainUnmanaged bool
-	Logger          SimpleLogger
 	DryRun          bool
 }
 
+// ApplyConfig applies the config to the database - note that specialfields are not automatically expanded
 func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 	err = d.Refresh()
 	if err != nil {
 		return
 	}
 
+	// Make sure the config table exists
+	_, err = d.DB.Exec(ConfigCreateSql)
+	if err != nil {
+		err = fmt.Errorf("error creating config table: %w", err)
+		return
+	}
+
 	if opts == nil {
 		opts = &ConfigOptions{
 			RetainUnmanaged: true,
-			Logger:          log.Default(),
+			DryRun:          false,
 		}
 	}
 
@@ -51,31 +58,32 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 
 	debugf("dbInfo: %+v\n", d.dbInfo)
 
-	tx, err := d.DB.Beginx()
+	s := "PRAGMA foreign_keys=OFF"
+	_, err = d.DB.Exec(s)
 	if err != nil {
+		err = fmt.Errorf("foreign_keys = OFF: %w", err)
 		return
 	}
+	debugf("APPLY: EXEC SQL: '%s'", s)
 
-	_, err = tx.Exec("PRAGMA foreign_keys=OFF")
+	defer func() {
+		s := "PRAGMA foreign_keys = ON"
+		_, err = d.DB.Exec(s)
+		if err != nil {
+			return
+		}
+		debugf("APPLY: EXEC SQL: '%s'", s)
+	}()
+
+	tx, err := d.DB.Beginx()
 	if err != nil {
-		err = fmt.Errorf("foreign_keys=OFF: %w", err)
 		return
 	}
 
 	noChanges := true
 
 	defer func() {
-		if err != nil {
-			tx.Rollback()
-			return
-		} else {
-			_, err = tx.Exec("PRAGMA foreign_keys=ON")
-			if err != nil {
-				tx.Rollback()
-				return
-			}
-		}
-		if opts.DryRun {
+		if err != nil || opts.DryRun {
 			tx.Rollback()
 			return
 		}
@@ -84,13 +92,6 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 			d.Refresh()
 		}
 	}()
-
-	// Make sure the config table exists
-	_, err = tx.Exec(ConfigCreateSql)
-	if err != nil {
-		err = fmt.Errorf("error creating config table: %w", err)
-		return
-	}
 
 	// Remove tables
 	if !opts.RetainUnmanaged {
@@ -110,7 +111,6 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 		}
 	}
 
-	var s string
 	// Add/modify tables
 	for _, table := range c.Tables {
 		ot := d.dbInfo.GetTableInfo(table.Name)
@@ -133,7 +133,7 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 			// Check no change, same number of fields & all fields the same
 			if len(ot.Fields) == len(table.Fields) {
 				for i, of := range ot.Fields {
-					nf := table.Fields[i].applySpecialFields()
+					nf := table.Fields[i]
 					err := nf.CompareDbFields(&of)
 					if err != nil {
 						debugf("%s.%s: change trigger by: %s", table.Name, nf.Name, err)
@@ -154,7 +154,7 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 					justAdd := true
 					for i, of := range ot.Fields {
 						// debugf("Compare '%s':\na: %+v\nb: %+v\n", table.Name, of, table.Fields[i])
-						nf := table.Fields[i].applySpecialFields()
+						nf := table.Fields[i]
 						err := nf.CompareDbFields(&of)
 						if err != nil {
 							debugf("APPLY: MODIFY table %s: Big change because of field '%s': %s\n", table.Name, of.Name, err)
@@ -262,7 +262,11 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 		// Compare with previous config
 		var oldYaml []byte
 		err = d.DB.Get(&oldYaml, "SELECT config FROM gdb_config ORDER BY id DESC LIMIT 1")
-		if err != nil || bytes.Compare(b, oldYaml) == 0 {
+		if err != sql.ErrNoRows {
+			// No existing config
+		} else if err != nil {
+			return
+		} else if bytes.Compare(b, oldYaml) == 0 {
 			// No need to save the config
 			return
 		}

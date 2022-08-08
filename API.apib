@@ -76,27 +76,31 @@ Returns an array of collection fields/columns for use building dynamic forms.
             "type": "DATETIME",
             "notnull": true,
             "default": "CURRENT_TIMESTAMP",
-            "writeprotected": true
+            "writeprotected": true,
+            "hidden": true
           },
           {
             "name": "name",
             "type": "TEXT",
+            "label": "Name",
             "notnull": true
           },
           {
-            "name": "color",
-            "type": "TEXT",
+            "name": "roleId",
+            "type": "integer",
             "notnull": true,
-            "lookupUri": "/api/color?select=name&sort=name"
+            "references": "role.id/name",
+            "control": "select"
           },
           {
             "name": "login",
             "type": "TEXT",
+            "label": "Login/username",
             "notnull": true,
             "minlen": 3,
             "maxlen": 3,
             "regexp": "^[a-z][a-z0-9]+$",
-            "regexphint": "must start with a letter followed by letters/number only"
+            "hint": "must start with a letter followed by letters/number only"
           },
         ]
         ```
@@ -122,6 +126,7 @@ When posting/putting data, errors may be returned, for example:
     + select (string, optional) - Comma seperated list of fields
         + Default: '*'
     + sort (string, optional) - SQL ORDER BY clause
+    + search (string, optional) - will be used to create a SQL `LIKE` where clause on all selected fields (add a % at the start/end as needed)
     + where (string, optional) - SQL where clause (must be url encoded so the `%` becomes `%25`)
     + limit (number, optional) -  Limit max items to return
         + Default: 1000

@@ -1,7 +1,6 @@
 package gdb
 
 import (
-	"log"
 	"time"
 )
 
@@ -23,7 +22,6 @@ func YamlConfig(b []byte) Option {
 		err = d.ApplyConfig(c, &ConfigOptions{
 			RetainUnmanaged: true,
 			// DryRun:          true,
-			Logger: log.Default(),
 		})
 		if err != nil {
 			return err

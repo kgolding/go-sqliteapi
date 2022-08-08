@@ -1,9 +1,7 @@
 package gdb
 
 import (
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"path"
 	"sort"
@@ -29,24 +27,9 @@ func (d *Database) GetRow(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	q, args, err := d.BuildQuery(bqc)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	d.debugLog.Printf("GetRow: SQL:\n%s\nArgs: %s", q, args)
-
-	err = d.queryJsonWriterRow(w, q, args)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "", http.StatusNotFound)
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
+	bqc.IncludeJunctions = true
+	w.Header().Set("Content-Type", "application/json")
+	d.queryJsonWriterRow(w, bqc)
 }
 
 func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {

@@ -39,14 +39,14 @@ func TestJoin(t *testing.T) {
 			ConfigTable{
 				Name: "t1",
 				Fields: []ConfigField{
-					ConfigField{Name: "id"},
+					ConfigField{Name: "id", PrimaryKey: 1, Type: "INTEGER"},
 					ConfigField{Name: "name"},
 				},
 			},
 			ConfigTable{
 				Name: "t2",
 				Fields: []ConfigField{
-					ConfigField{Name: "id"},
+					ConfigField{Name: "id", PrimaryKey: 1, Type: "INTEGER"},
 					ConfigField{Name: "name"},
 					ConfigField{Name: "t1Id", References: "t1.id/name"},
 				},
@@ -66,14 +66,14 @@ func TestJoin(t *testing.T) {
 
 	// Get t2 row joined with t1 and check t1 name is in the result
 	bcq := BuildQueryConfig{
-		Table: "t2",
-		Key:   fmt.Sprintf("%d", t2r1Id),
+		Table:   "t2",
+		PkValue: fmt.Sprintf("%d", t2r1Id),
 	}
-	q, args, err := db.BuildQuery(bcq)
-	assert.NoError(t, err)
+	// q, args, err := db.BuildQuery(bcq)
+	// assert.NoError(t, err)
 
 	var b bytes.Buffer
-	assert.NoError(t, db.queryJsonWriterRow(&b, q, args))
+	assert.NoError(t, db.queryJsonWriterRow(&b, bcq))
 	assert.Contains(t, b.String(), "T1 Row 1")
 }
 
@@ -88,14 +88,14 @@ func TestJoinMultipleLabels(t *testing.T) {
 			ConfigTable{
 				Name: "t1",
 				Fields: []ConfigField{
-					ConfigField{Name: "id"},
+					ConfigField{Name: "id", PrimaryKey: 1, Type: "INTEGER"},
 					ConfigField{Name: "name"},
 				},
 			},
 			ConfigTable{
 				Name: "t2",
 				Fields: []ConfigField{
-					ConfigField{Name: "id"},
+					ConfigField{Name: "id", PrimaryKey: 1, Type: "INTEGER"},
 					ConfigField{Name: "name"},
 					ConfigField{Name: "t1Id", References: "t1.id/id,name"},
 				},
@@ -115,14 +115,14 @@ func TestJoinMultipleLabels(t *testing.T) {
 
 	// Get t2 row joined with t1 and check t1 name is in the result
 	bcq := BuildQueryConfig{
-		Table: "t2",
-		Key:   fmt.Sprintf("%d", t2r1Id),
+		Table:   "t2",
+		PkValue: fmt.Sprintf("%d", t2r1Id),
 	}
-	q, args, err := db.BuildQuery(bcq)
-	assert.NoError(t, err)
+	// q, args, err := db.BuildQuery(bcq)
+	// assert.NoError(t, err)
 
 	var b bytes.Buffer
-	assert.NoError(t, db.queryJsonWriterRow(&b, q, args))
+	assert.NoError(t, db.queryJsonWriterRow(&b, bcq))
 	assert.Contains(t, b.String(), "1|T1 Row 1")
 }
 
@@ -210,14 +210,14 @@ tables:
 
 	// Get table2 row joined with table1 and check label name is in the result
 	bcq := BuildQueryConfig{
-		Table: "table2",
-		Key:   "1",
+		Table:   "table2",
+		PkValue: "1",
 	}
-	q, args, err := db.BuildQuery(bcq)
-	assert.NoError(t, err)
+	// q, args, err := db.BuildQuery(bcq)
+	// assert.NoError(t, err)
 
 	var b bytes.Buffer
-	assert.NoError(t, db.queryJsonWriterRow(&b, q, args))
+	assert.NoError(t, db.queryJsonWriterRow(&b, bcq))
 	assert.Contains(t, b.String(), "ABC 1")
 
 	_, err = db.insertMap("table1", map[string]interface{}{
@@ -225,5 +225,129 @@ tables:
 		"text": "ABC 2",
 	}, nil)
 	assert.Error(t, err, "duplicated oid should not be allowed")
+}
+
+func TestMany2Many(t *testing.T) {
+	const yaml = `
+tables:
+  t1:
+    id:
+    title:
+  t2:
+    id:
+    title2:
+  t1T2:
+    id:
+    t1Id:
+      ref: t1.id/title
+    t2Id:
+      ref: t2.id/title2
+`
+	db, err := NewDatabase("file::memory:?cache=shared",
+		YamlConfig([]byte(yaml)),
+		// Log(log.Default()),
+		// DebugLog(log.Default()),
+	)
+	assert.NoError(t, err)
+	defer db.Close()
+
+	// t.Log(db.config.String())
+
+	// Populate t1
+	_, err = db.insertMap("t1", map[string]interface{}{
+		"title": "T1 1",
+	}, nil)
+	assert.NoError(t, err)
+	_, err = db.insertMap("t1", map[string]interface{}{
+		"title": "T1 2",
+	}, nil)
+	assert.NoError(t, err)
+
+	// Populate t2
+	_, err = db.insertMap("t2", map[string]interface{}{
+		"title2": "T2 1",
+	}, nil)
+	assert.NoError(t, err)
+	_, err = db.insertMap("t2", map[string]interface{}{
+		"title2": "T2 2",
+	}, nil)
+	assert.NoError(t, err)
+	_, err = db.insertMap("t2", map[string]interface{}{
+		"title2": "T2 3",
+	}, nil)
+	assert.NoError(t, err)
+
+	// Insert joined data
+	id, err := db.insertMap("t1", map[string]interface{}{
+		"title": "Joined",
+		"t1T2": []map[string]interface{}{
+			{"t2Id": 1},
+			{"t2Id": 2},
+		},
+	}, nil)
+	assert.NoError(t, err)
+	// t.Logf("Inserted t1 row with id %d that is linked to t2 1 & 2", id)
+
+	var c int
+	assert.NoError(t, db.DB.Get(&c, "SELECT COUNT(*) FROM t1T2 WHERE t1Id = ?", id))
+	assert.Equal(t, 2, c)
+
+	rows, err := db.DB.Queryx("SELECT * FROM t1T2")
+	assert.NoError(t, err)
+	for rows.Next() {
+		m := make(map[string]interface{})
+		rows.MapScan(m)
+		// t.Logf("t1T2: %#v", m)
+	}
+
+	// Get table2 row joined with table1 and check label name is in the result
+	bqc := BuildQueryConfig{
+		Table:            "t1",
+		PkValue:          id,
+		IncludeJunctions: true,
+	}
+	// q, args, err := db.BuildQuery(bcq)
+	// assert.NoError(t, err)
+	// t.Log(q)
+
+	var b bytes.Buffer
+	// @TODO
+	assert.NoError(t, db.queryJsonWriterRow(&b, bqc))
+	assert.Contains(t, b.String(), `[{"id":1,"t1Id":"3","t2Id":"1"},{"id":2,"t1Id":"3","t2Id":"2"}]`)
+	// t.Log(b.String())
+}
+
+func WIPTestUniqueIndex(t *testing.T) {
+	const yaml = `
+tables:
+  table1:
+    id:
+    text:`
+	db, err := NewDatabase("file::memory:?cache=shared",
+		YamlConfig([]byte(yaml)),
+		Log(log.Default()),
+		DebugLog(log.Default()),
+	)
+	assert.NoError(t, err)
+	defer db.Close()
+
+	data := map[string]interface{}{"text": "TEST"}
+
+	_, err = db.insertMap("table1", data, nil)
+	assert.NoError(t, err)
+
+	row2id, err := db.insertMap("table1", data, nil)
+	assert.NoError(t, err)
+
+	// Add a unique index
+	c, err := NewConfigFromYaml([]byte(yaml + `
+          unique: true`))
+	assert.NoError(t, err)
+
+	assert.Error(t, db.ApplyConfig(c, nil), "should fail as table1.text is duplicated")
+
+	assert.NoError(t, db.delete("table1", row2id, nil))
+
+	assert.NoError(t, db.ApplyConfig(c, nil))
 
 }

@@ -10,18 +10,20 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var SpecialFields = map[string]TableFieldInfo{
+var SpecialFields = map[string]ConfigField{
 	"id": {
 		Name:       "id",
 		Type:       "INTEGER",
 		NotNull:    true,
 		PrimaryKey: 1,
+		ReadOnly:   true,
 	},
 	"createdAt": {
-		Name:         "createdAt",
-		Type:         "DATETIME",
-		NotNull:      true,
-		DefaultValue: "CURRENT_TIMESTAMP",
+		Name:     "createdAt",
+		Type:     "DATETIME",
+		NotNull:  true,
+		Default:  "CURRENT_TIMESTAMP",
+		ReadOnly: true,
 	},
 }
 
@@ -86,6 +88,7 @@ type ConfigField struct {
 	Default    interface{} `yaml:"default,omitempty" json:"-"`
 	References string      `yaml:"references,omitempty" json:"references,omitempty"` // e.g. driver.id // FOREIGN KEY("driverId") REFERENCES "driver"("id")
 	PrimaryKey int         `yaml:"pk,omitempty" json:"-"`
+	Unique     bool        `json:"unique,omitempty"`
 
 	// UI
 	Label    string `yaml:"label,omitempty" json:"label,omitempty"`
@@ -229,39 +232,50 @@ func (a *ConfigField) CompareDbFields(b *TableFieldInfo) error {
 
 func (f *ConfigField) ColDef() (string, error) {
 
-	lf := f.applySpecialFields()
+	// lf := f.applySpecialFields()
 
 	// default:
-	datatype := strings.ToUpper(lf.Type)
+	datatype := strings.ToUpper(f.Type)
 	if datatype == "" {
 		datatype = "TEXT" // Default
 	}
-	s := fmt.Sprintf("`%s` %s", lf.Name, datatype)
-	if lf.NotNull {
+	s := fmt.Sprintf("`%s` %s", f.Name, datatype)
+	if f.NotNull {
 		s += " NOT NULL"
 	}
-	if lf.Default != nil {
-		v := fmt.Sprintf("%v", lf.Default)
+	if f.Default != nil {
+		v := fmt.Sprintf("%v", f.Default)
 		if strings.HasPrefix(v, "#") {
 			v = `'` + v + `'`
 		}
 		s += " DEFAULT " + v
 	}
-	if lf.PrimaryKey > 0 {
+	if f.PrimaryKey > 0 {
 		s += " PRIMARY KEY"
 	}
 	return s, nil
 }
 
-func (f ConfigField) applySpecialFields() ConfigField {
-	if sf, ok := SpecialFields[f.Name]; ok {
-		f.Type = sf.Type
-		f.NotNull = sf.NotNull
-		f.Default = sf.DefaultValue
-		f.PrimaryKey = sf.PrimaryKey
+func newConfigFieldWithDefaults(name string) ConfigField {
+	if sf, ok := SpecialFields[name]; ok {
+		sf.Name = name
+		return sf
 	}
-	return f
+	return ConfigField{
+		Name: name,
+		Type: "TEXT",
+	}
 }
+
+// func (f ConfigField) applySpecialFields() ConfigField {
+// 	if sf, ok := SpecialFields[f.Name]; ok {
+// 		f.Type = sf.Type
+// 		f.NotNull = sf.NotNull
+// 		f.Default = sf.DefaultValue
+// 		f.PrimaryKey = sf.PrimaryKey
+// 	}
+// 	return f
+// }
 
 func (c *Config) GetTable(name string) *ConfigTable {
 	if c == nil {
@@ -293,17 +307,13 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 			Name: tableName,
 		}
 		for _, x := range fields {
-			f := ConfigField{ // Defaults
-				Type: "text",
-			}
-
-			var ok bool
-			f.Name, ok = x.Key.(string)
+			name, ok := x.Key.(string)
 			if !ok {
 				return nil, fmt.Errorf("%s: field name is not a string! It is a %T (%v)", tableName, x.Key, x.Key)
 			}
 
-			f = f.applySpecialFields()
+			f := newConfigFieldWithDefaults(name)
+
 			if x.Value != nil {
 				m, ok := x.Value.(yaml.MapSlice)
 				if !ok {
@@ -352,6 +362,8 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 						f.References = s
 					case "pk", "primarykey":
 						f.PrimaryKey = i
+					case "unique":
+						f.Unique = tf
 					case "label":
 						f.Label = s
 					case "hidden":

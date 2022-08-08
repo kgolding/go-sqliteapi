@@ -3,7 +3,7 @@
 ## Golang powered SQLite database API
 
 * Driven by the database schema: add a table, add a field and the API will use it after a call to `Refresh()`
-* Better still, and in additional to the above pass in a configuration that will provide:
+* Better still, and in additional to the above you can provide a configuration that will provide:
   * Database migrations
   * Automatic joins for `references`/foreign keys
   * Field validation
@@ -41,7 +41,7 @@ tables:
 
 Fields can have the following attributes:
 
-**Database related**
+##### Database related
 
 * `type` SQLite type, defaults to `TEXT` see https://www.sqlite.org/datatype3.html
 * `pk` if true this field will be the primary key
@@ -50,19 +50,18 @@ Fields can have the following attributes:
 * `ref` Foreign key/reference in the format `tableName`.`keyField`/`labelField`. e.g. `tableA.id/text`
   * `labelField` is one or more comma seperated fields from the referenced table that will be returned using an automatic join as a new field with the keyField name and a `_RefLabel` suffix e.g. `keyField_RefLabel`. Multiple labelField's will be seperated with a `|`
 
-**Validation**
+##### Validation related
 
 * `min` Minimum value to accept or minimum length for none numeric fields (e.g. TEXT)
 * `max` Maximum value to accept or maximum length for none numeric fields (e.g. TEXT)
 * `regex` Regular expression
 
-**API related**
+##### API related
 
 * `hidden` prevents the field from being returned via the API (useful for password fields)
 * `readonly` prevents the field from being changed via the API
 
-
-**User interface related**
+##### User interface related
 
 * `label` User friendly display label
 * `hint` User hint to display as a placeholder/help text

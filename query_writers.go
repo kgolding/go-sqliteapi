@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 )
 
 // queryJsonArrayWriter runs the query and streams the result as a json array of arrays
@@ -140,7 +141,61 @@ func (d *Database) QueryCsvWriter(w io.Writer, query string, args []interface{})
 }
 
 // queryJsonWriter runs the query and streams the result as json to the given Writer
-func (d *Database) queryJsonWriterRow(w io.Writer, query string, args []interface{}) error {
+func (d *Database) queryJsonWriterRow(w io.Writer, bqc *BuildQueryConfig) error {
+	tx, err := d.DB.Beginx()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() // This is a query so we always rollback
+
+	query, args, err := d.BuildQuery(bqc)
+
+	d.debugLog.Printf("queryJsonWriterRow: BuildQueryConfig: %#v\n", bqc)
+
+	row := tx.QueryRowx(query, args...)
+	if row == nil {
+		return sql.ErrNoRows
+	}
+
+	ret := make(map[string]interface{})
+
+	err = row.MapScan(ret)
+	if err != nil {
+		return err
+	}
+
+	for sqIndex, sq := range bqc.SubQueries {
+		sargs := make([]interface{}, 0)
+		for _, f := range sq.ArgFields {
+			sargs = append(sargs, ret[f])
+		}
+		srows, err := tx.Queryx(sq.Query, sargs...)
+		if err != nil {
+			return fmt.Errorf("sub-query %d: %w", sqIndex, err)
+		}
+
+		sret := make([]map[string]interface{}, 0)
+		for srows.Next() {
+			srow := make(map[string]interface{})
+			err = srows.MapScan(srow)
+			if err != nil {
+				return fmt.Errorf("sub-query %d: %w", sqIndex, err)
+			}
+			sret = append(sret, srow)
+		}
+		ret[sq.Name] = sret
+	}
+
+	b, err := json.Marshal(ret)
+	if err != nil {
+		return err
+	}
+	w.Write(b)
+	return nil
+}
+
+// queryJsonWriter runs the query and streams the result as json to the given Writer
+func (d *Database) XqueryJsonWriterRow(w io.Writer, query string, args []interface{}) error {
 	tx, err := d.DB.Beginx()
 	if err != nil {
 		return err
@@ -165,4 +220,26 @@ func (d *Database) queryJsonWriterRow(w io.Writer, query string, args []interfac
 	}
 	w.Write(b)
 	return nil
+}
+
+func processFields_JSON(m map[string]interface{}) {
+	for k, v := range m {
+		if strings.HasSuffix(k, "_JSON") {
+			switch q := v.(type) {
+			case nil:
+				delete(m, k)
+
+			case string:
+				var x interface{}
+				err := json.Unmarshal([]byte(q), &x)
+				if err == nil {
+					delete(m, k)
+					if x != nil {
+						newK := strings.TrimSuffix(k, "_JSON")
+						m[newK] = x
+					}
+				}
+			}
+		}
+	}
 }

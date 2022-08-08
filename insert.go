@@ -5,12 +5,36 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/jmoiron/sqlx"
 )
 
 var ErrUnknownKey = errors.New("unknown key")
 var ErrUnknownTable = errors.New("unknown table/view")
 
 func (d *Database) insertMap(table string, data map[string]interface{}, user User) (int, error) {
+	ctx, _ := context.WithTimeout(context.Background(), d.timeout)
+	tx, err := d.DB.BeginTxx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+
+	id, err := d.insertMapWithTx(tx, table, data, user)
+
+	if err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return 0, err
+	}
+
+	return id, nil
+}
+
+func (d *Database) insertMapWithTx(tx *sqlx.Tx, table string, data map[string]interface{}, user User) (int, error) {
 	logf := func(format string, args ...interface{}) {
 		d.debugLog.Printf("insertMap: "+format, args...)
 	}
@@ -22,27 +46,25 @@ func (d *Database) insertMap(table string, data map[string]interface{}, user Use
 		return 0, fmt.Errorf("unknown table name '%s'", table)
 	}
 
-	ctx, _ := context.WithTimeout(context.Background(), d.timeout)
-	tx, err := d.DB.BeginTxx(ctx, nil)
-	if err != nil {
-		logf("error starting transaction: %s", err)
-		return 0, err
-	}
-
-	err = d.runHooks(table, HookParams{data, HookBeforeInsert, tx, user})
+	err := d.runHooks(table, HookParams{data, HookBeforeInsert, tx, user})
 	if err != nil {
 		logf("error running before before hook: %s", err)
-		tx.Rollback()
 		return 0, err
 	}
 
+	// Create an array of fields and an equal array of values to use as args
 	fields := make([]string, 0)
 	values := make([]interface{}, 0)
+
+	// Unused data fields which we'll check for joined tables
+	unusedDataFields := make([]string, 0)
 	for k, v := range data {
+		used := false
 		for _, f := range tableInfo.Fields {
 			if f.Name == k {
+				used = true
 				if f.PrimaryKey > 0 && tableInfo.IsPrimaryKeyId {
-					continue // Do insert an autoinc value
+					continue // Do insert as autoinc value
 				}
 				if d.IsFieldWritable(table, k) { // And are writable
 					err = d.FieldValidation(table, k, v)
@@ -59,10 +81,12 @@ func (d *Database) insertMap(table string, data map[string]interface{}, user Use
 				}
 			}
 		}
+		if !used {
+			unusedDataFields = append(unusedDataFields, k)
+		}
 	}
 
 	if len(fields) == 0 {
-		tx.Rollback()
 		return 0, errors.New("no values to store")
 	}
 
@@ -75,24 +99,65 @@ func (d *Database) insertMap(table string, data map[string]interface{}, user Use
 	res, err := tx.Exec(sql, values...)
 	if err != nil {
 		logf("error executing sql: %s", err)
-		tx.Rollback()
 		return 0, err
 	}
 
-	v, _ := res.LastInsertId()
+	v, err := res.LastInsertId()
 	id := int(v)
-	data["id"] = id
+	if err == nil {
+		data["id"] = id
+	}
+
+	// Handle joined tables if data exists
+	if d.config != nil {
+		for _, k := range unusedDataFields {
+			// See if the field name is a table e.g. "sessionThing"
+			if t := d.config.GetTable(k); t != nil {
+				logf("got join table %s", t.Name)
+				for _, f := range t.Fields {
+					logf("link table %s, checking field %s: %s vs %s.", t.Name, f.Name, f.References, table)
+					if strings.HasPrefix(f.References, table+".") { // Target table has a ref to the main table
+						ref, err := NewReference(f.References)
+						if err != nil {
+							logf("bad reference '%s' in joined table %s", f.References, t.Name)
+							continue
+						}
+						logf("link table %s.%s: %s", t.Name, f.Name, ref)
+						// Clear out existing records
+
+						tx.Exec("DELETE FROM `"+t.Name+"` WHERE `"+ref.KeyField+`" = ?`, data[ref.KeyField])
+						// We might have an array of id's or an array of map[string]interface{}
+						switch x := data[k].(type) {
+						case []map[string]interface{}:
+							for _, data2 := range x {
+								data2[f.Name] = data[ref.KeyField]
+								// fmt.Printf("f.Name: %s, ref.KeyField: %v, data: %#v\n", f.Name, ref.KeyField, data)
+								// fmt.Printf("INSERT JOIN TABLE '%s': %#v\n", t.Name, data2)
+								_, err := d.insertMapWithTx(tx, t.Name, data2, user)
+								if err != nil {
+									logf("%s: %s", f.References, err)
+								}
+							}
+
+						// case []interface{}: // simple array of key values
+						// 	xFields := []string{ref.ResultColKey().String()} // e.g. sessionThing.id
+						// 	xValues := []interface{}{data[ref.KeyField]}     // e.g. id
+
+						// 	sql := "INSERT INTO `" + t.Name + "` "
+						// 	sql += "(" + ref.ResultColKey().String() + ", "
+
+						default:
+							logf("unknown data type for %T for %s", x, k)
+						}
+					}
+				}
+			}
+		}
+	}
 
 	err = d.runHooks(table, HookParams{data, HookAfterInsert, tx, user})
 	if err != nil {
 		logf("error running after insert hook: %s", err)
-		tx.Rollback()
-		return 0, err
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		logf("error commiting: %s", err)
 		return 0, err
 	}
 

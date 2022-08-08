@@ -25,6 +25,7 @@ tables:
 `
 	db, err := NewDatabase("file::memory:?cache=shared",
 		// Log(log.Default()),
+		// DebugLog(log.Default()),
 		YamlConfig([]byte(yaml)))
 	assert.NoError(t, err)
 	defer db.Close()
