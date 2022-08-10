@@ -9,7 +9,7 @@ import (
 	"github.com/mattn/go-sqlite3"
 )
 
-// https://github.com/rqlite/rqlite/blob/master/db/db.go#L648
+// Ref: https://github.com/rqlite/rqlite/blob/master/db/db.go#L648
 
 // Backup writes a consistent snapshot of the database to the given file.
 // This function can be called when changes to the database are in flight.

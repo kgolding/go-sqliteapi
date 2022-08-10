@@ -230,34 +230,6 @@ func (d *Database) queryJsonWriterRow(w io.Writer, sb *SelectBuilder, args []int
 	return nil
 }
 
-// queryJsonWriter runs the query and streams the result as json to the given Writer
-func (d *Database) XqueryJsonWriterRow(w io.Writer, query string, args []interface{}) error {
-	tx, err := d.DB.Beginx()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback() // This is a query so we always rollback
-
-	row := tx.QueryRowx(query, args...)
-	if row == nil {
-		return sql.ErrNoRows
-	}
-
-	ret := make(map[string]interface{})
-
-	err = row.MapScan(ret)
-	if err != nil {
-		return err
-	}
-
-	b, err := json.Marshal(ret)
-	if err != nil {
-		return err
-	}
-	w.Write(b)
-	return nil
-}
-
 func processFields_JSON(m map[string]interface{}) {
 	for k, v := range m {
 		if strings.HasSuffix(k, "_JSON") {
@@ -280,6 +252,8 @@ func processFields_JSON(m map[string]interface{}) {
 	}
 }
 
+// AddRefLabels adds *_RefLabel select fields and joins for all existing select fields that have
+// a reference (with a label field)
 func (d *Database) AddRefLabels(sb *SelectBuilder, exclTable string) {
 	// d.debugLog.Printf("AddRefLabels: sb: %#v\n", sb)
 	if ct := d.config.GetTable(sb.From); ct != nil {
@@ -291,22 +265,34 @@ func (d *Database) AddRefLabels(sb *SelectBuilder, exclTable string) {
 		// d.debugLog.Printf("AddRefLabels: ct.Fields: %#v\n", ct.Fields)
 		for _, selectField := range sb.Select {
 			// d.debugLog.Printf("AddRefLabels: selectField: %#v\n", selectField)
+			// table, field := tableFieldUnWrapped(selectField)
 			for _, f := range ct.Fields {
-				// d.debugLog.Printf("AddRefLabels: f: %#v\n", f)
+				// fmt.Printf("A. AddRefLabels: selectField: %s, f.Name: %s, f.Ref: %s\n", selectField, f.Name, f.References)
 				if selectField == tableFieldWrapped(sb.From, f.Name) && f.References != "" {
+					// fmt.Printf("B. AddRefLabels: selectField: %s, f.Name: %s, f.Ref: %s\n", selectField, f.Name, f.References)
 					ref, err := NewReference(f.References)
 					if err == nil && ref.LabelField != "" && ref.Table != exclTable {
-						sb.Select = append(sb.Select, ref.ResultColLabel(f.Name+RefLabelSuffix).StringAs())
-						sb.Joins = append(sb.Joins, Join{
-							Type:  LEFT_OUTER,
-							Table: ref.Table,
-							On: []JoinOn{
-								{
-									Field:       ref.KeyField,
-									ParentField: f.Name,
+						refField := ref.ResultColLabel(f.Name + RefLabelSuffix).StringAs()
+						refFieldExists := false
+						for _, s := range sb.Select {
+							if s == refField {
+								refFieldExists = true
+								break
+							}
+						}
+						if !refFieldExists {
+							sb.Select = append(sb.Select, refField)
+							sb.Joins = append(sb.Joins, Join{
+								Type:  LEFT_OUTER,
+								Table: ref.Table,
+								On: []JoinOn{
+									{
+										Field:       ref.KeyField,
+										ParentField: f.Name,
+									},
 								},
-							},
-						})
+							})
+						}
 					}
 				}
 			}

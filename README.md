@@ -1,13 +1,12 @@
 # Go-SQLAPI
 
-## Golang powered SQLite database API
+## Golang powered SQLite database access layer with API, migrations, foreign key lookup and joined tables
 
-* Driven by the database schema: add a table, add a field and the API will use it after a call to `Refresh()`
-* Better still, and in additional to the above you can provide a configuration that will provide:
+* YAML/Json configuration that provides:
   * Database migrations
-  * Automatic joins for `references`/foreign keys
+  * Automatic joins for references/foreign keys
   * Field validation
-* API includes metadata for facilate dynamic GUI's
+* API includes metadata to facilate dynamic GUI's
 * Live backup's
 
 See [API Reference](API.html)
@@ -15,9 +14,8 @@ See [API Reference](API.html)
 ### Configuration
 
 Example configuration (YAML) for two tables
-* `tableA` has an autoincremented `id` primary key
-and a `text` field that must have a least 10 chars
-* `table` has a `code` primary key and a `aId` field that is a reference to the `tableA`.`id` field, which that must be provided (notnull), and must exist in `tableA`
+* `tableA` has an autoincremented `id` primary key and a `text` field that must have a least 10 chars
+* `tableB` has a `code` primary key and a `aId` field that is a reference to the `tableA`.`id` field, that must be provided (notnull), and must exist in `tableA`
 
 ```
 tables:
@@ -59,14 +57,17 @@ Fields can have the following attributes:
 ##### API related
 
 * `hidden` prevents the field from being returned via the API (useful for password fields)
-* `readonly` prevents the field from being changed via the API
+* `readonly` prevents the field from being changed
 
 ##### User interface related
 
 * `label` User friendly display label
 * `hint` User hint to display as a placeholder/help text
-* `control` To advise a GUI what control to use
-
+* `control` To advise a GUI what control to use (GUI's should use `type` as well):
+  * `text` - Default single line text
+  * `textarea` - Multiline
+  * `checkbox`
+  * `select`
 
 ##### Special fields
 
@@ -77,12 +78,12 @@ ROWID which provides autoincrement numbering.
 * `createdAt` is set as `DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP` and thus is automatically
 set to the timestamp of creation.
 
-Additional special fields can be added via the public `SpecialFields` map
+Additional special fields can be added via the exported `SpecialFields` map
 
 ## Migrations
 
 Configuration changes are automatically detected, and the database schema will be modifed accordingly.
-Such migrations will retain data unless a tables field is deleted in which that fields data will be lost.
+Such migrations will retain data unless a tables field is deleted in which case that fields data will be lost.
 
 When a migration occurs, the `gdb_config` table will be updated to include a copy of the new configuration. The `PRAGMA user_version` will be set to match the `id` of the `gdb_config` table row.
 

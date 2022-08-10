@@ -89,5 +89,4 @@ func TestSelectBuilder(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "SELECT `table1`.`id`, `table1`.`text`\nFROM `table1`\nLEFT OUTER JOIN `table2` ON `table2`.`table1Id`=`table1`.`id`\nWHERE `table1`.`id`=?\nORDER BY `table1`.`id` ASC", s)
 	QueryDB(t, d, s, 1)
-
 }

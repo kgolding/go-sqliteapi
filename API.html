@@ -33,27 +33,31 @@ no such table: notatable
     "type": "DATETIME",
     "notnull": true,
     "default": "CURRENT_TIMESTAMP",
-    "writeprotected": true
+    "writeprotected": true,
+    "hidden": true
   },
   {
     "name": "name",
     "type": "TEXT",
+    "label": "Name",
     "notnull": true
   },
   {
-    "name": "color",
-    "type": "TEXT",
+    "name": "roleId",
+    "type": "integer",
     "notnull": true,
-    "lookupUri": "/api/color?select=name&amp;sort=name"
+    "ref": "role.id/name",
+    "control": "select"
   },
   {
     "name": "login",
     "type": "TEXT",
+    "label": "Login/username",
     "notnull": true,
-    "minlen": 3,
-    "maxlen": 3,
-    "regexp": "^[a-z][a-z0-9]+$",
-    "regexphint": "must start with a letter followed by letters/number only"
+    "min": 3,
+    "max": 3,
+    "regex": "^[a-z][a-z0-9]+$",
+    "hint": "must start with a letter followed by letters/number only"
   },
 ]
 `</span><span class="hljs-string">``</span></code></pre><div style="height: 1px;"></div></div></div><div class="title"><strong>Response&nbsp;&nbsp;<code>400</code></strong><div class="collapse-button"><span class="close">Hide</span><span class="open">Show</span></div></div><div class="collapse-content"><div class="inner"><h5>Headers</h5><pre><code><span class="hljs-attribute">Content-Type</span>: <span class="hljs-string">text/plain</span></code></pre><div style="height: 1px;"></div><h5>Body</h5><pre><code><span class="hljs-string">``</span><span class="hljs-string">`
@@ -71,9 +75,11 @@ invalid table name 'notatable`</span>
 <p><code>name: too short, must be at least 3 chars</code></p>
 </li>
 </ul>
-<div id="collections-collection-items-get" class="action get"><h4 class="action-heading"><div class="name">Get collection items</div><a href="#collections-collection-items-get" class="method get">GET</a><code class="uri">/api/{collection_name}{?select,sort,where,limit,offset,format}</code></h4><h4>Example URI</h4><div class="definition"><span class="method get">GET</span>&nbsp;<span class="uri"><span class="hostname"></span>/api/<span class="hljs-attribute" title="collection_name">collection_name</span>?<span class="hljs-attribute">select=</span><span class="hljs-literal"></span>&<span class="hljs-attribute">sort=</span><span class="hljs-literal"></span>&<span class="hljs-attribute">where=</span><span class="hljs-literal"></span>&<span class="hljs-attribute">limit=</span><span class="hljs-literal"></span>&<span class="hljs-attribute">offset=</span><span class="hljs-literal"></span>&<span class="hljs-attribute">format=</span><span class="hljs-literal"></span></span></div><div class="title"><strong>URI Parameters</strong><div class="collapse-button show"><span class="close">Hide</span><span class="open">Show</span></div></div><div class="collapse-content"><dl class="inner"><dt>collection_name</dt><dd><code>string</code>&nbsp;<span class="required">(required)</span>&nbsp;<p>Collection name</p>
+<div id="collections-collection-items-get" class="action get"><h4 class="action-heading"><div class="name">Get collection items</div><a href="#collections-collection-items-get" class="method get">GET</a><code class="uri">/api/{collection_name}{?select,sort,search,where,limit,offset,format}</code></h4><p>Fields with references will have a shadow field automatically added (suffixed <code>_RefLabel</code> to include the referenced table label field.</p>
+<h4>Example URI</h4><div class="definition"><span class="method get">GET</span>&nbsp;<span class="uri"><span class="hostname"></span>/api/<span class="hljs-attribute" title="collection_name">collection_name</span>?<span class="hljs-attribute">select=</span><span class="hljs-literal"></span>&<span class="hljs-attribute">sort=</span><span class="hljs-literal"></span>&<span class="hljs-attribute">search=</span><span class="hljs-literal"></span>&<span class="hljs-attribute">where=</span><span class="hljs-literal"></span>&<span class="hljs-attribute">limit=</span><span class="hljs-literal"></span>&<span class="hljs-attribute">offset=</span><span class="hljs-literal"></span>&<span class="hljs-attribute">format=</span><span class="hljs-literal"></span></span></div><div class="title"><strong>URI Parameters</strong><div class="collapse-button show"><span class="close">Hide</span><span class="open">Show</span></div></div><div class="collapse-content"><dl class="inner"><dt>collection_name</dt><dd><code>string</code>&nbsp;<span class="required">(required)</span>&nbsp;<p>Collection name</p>
 </dd><dt>select</dt><dd><code>string</code>&nbsp;<span>(optional)</span>&nbsp;<span class="text-info default"><strong>Default:&nbsp;</strong><span>'*'</span></span>&nbsp;<p>Comma seperated list of fields</p>
 </dd><dt>sort</dt><dd><code>string</code>&nbsp;<span>(optional)</span>&nbsp;<p>SQL ORDER BY clause</p>
+</dd><dt>search</dt><dd><code>string</code>&nbsp;<span>(optional)</span>&nbsp;<p>will be used to create a SQL <code>LIKE</code> where clause on all selected fields (add a % at the start/end as needed)</p>
 </dd><dt>where</dt><dd><code>string</code>&nbsp;<span>(optional)</span>&nbsp;<p>SQL where clause (must be url encoded so the <code>%</code> becomes <code>%25</code>)</p>
 </dd><dt>limit</dt><dd><code>number</code>&nbsp;<span>(optional)</span>&nbsp;<span class="text-info default"><strong>Default:&nbsp;</strong><span>1000</span></span>&nbsp;<p>Limit max items to return</p>
 </dd><dt>offset</dt><dd><code>number</code>&nbsp;<span>(optional)</span>&nbsp;<span class="text-info default"><strong>Default:&nbsp;</strong><span>0</span></span>&nbsp;<p>Offset/skip items returned</p>
@@ -83,6 +89,8 @@ invalid table name 'notatable`</span>
   {
     "id": 1,
     "name": "Hello world!"
+    "table2Id": 1,
+    "table2Id_RefLabel": "value from joined table2",
   }
 ]
 `</span><span class="hljs-string">``</span></code></pre><div style="height: 1px;"></div></div></div><div class="title"><strong>Response&nbsp;&nbsp;<code>400</code></strong><div class="collapse-button"><span class="close">Hide</span><span class="open">Show</span></div></div><div class="collapse-content"><div class="inner"><h5>Headers</h5><pre><code><span class="hljs-attribute">Content-Type</span>: <span class="hljs-string">text/plain</span></code></pre><div style="height: 1px;"></div><h5>Body</h5><pre><code><span class="hljs-string">``</span><span class="hljs-string">`
@@ -101,7 +109,7 @@ invalid table name 'notatable`</span>
 </dd><dt>id</dt><dd><code>number</code>&nbsp;<span class="required">(required)</span>&nbsp;<p>Item ID</p>
 </dd></dl></div><div class="title"><strong>Response&nbsp;&nbsp;<code>200</code></strong></div><div class="title"><strong>Response&nbsp;&nbsp;<code>400</code></strong><div class="collapse-button"><span class="close">Hide</span><span class="open">Show</span></div></div><div class="collapse-content"><div class="inner"><h5>Headers</h5><pre><code><span class="hljs-attribute">Content-Type</span>: <span class="hljs-string">text/plain</span></code></pre><div style="height: 1px;"></div><h5>Body</h5><pre><code><span class="hljs-string">``</span><span class="hljs-string">`
 invalid row ID
-`</span><span class="hljs-string">``</span></code></pre><div style="height: 1px;"></div></div></div><div class="title"><strong>Response&nbsp;&nbsp;<code>404</code></strong></div></div></div></section></div></div></div><p style="text-align: center;" class="text-muted">Generated by&nbsp;<a href="https://github.com/danielgtaylor/aglio" class="aglio">aglio</a>&nbsp;on 18 Jul 2022</p><script>/* eslint-env browser */
+`</span><span class="hljs-string">``</span></code></pre><div style="height: 1px;"></div></div></div><div class="title"><strong>Response&nbsp;&nbsp;<code>404</code></strong></div></div></div></section></div></div></div><p style="text-align: center;" class="text-muted">Generated by&nbsp;<a href="https://github.com/danielgtaylor/aglio" class="aglio">aglio</a>&nbsp;on 10 Aug 2022</p><script>/* eslint-env browser */
 /* eslint quotes: [2, "single"] */
 'use strict';
 

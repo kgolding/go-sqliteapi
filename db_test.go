@@ -2,12 +2,9 @@ package gdb
 
 import (
 	"bytes"
-	"fmt"
 	"log"
-	"os"
 	"testing"
 
-	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -73,10 +70,13 @@ func TestJoin(t *testing.T) {
 	// }
 	// q, args, err := db.BuildQuery(bcq)
 	// assert.NoError(t, err)
-	sb := &SelectBuilder{
-		From:  "t2",
-		Where: []string{"`t2`.`id`=?"},
-	}
+	sb := NewSelectBuilder("t2", []string{"id", "name", "t1Id"})
+	// sb := &SelectBuilder{
+	// 	Select: []string{"id", "name"},
+	// 	From:   "t2",
+	// 	Where:  []string{"`t2`.`id`=?"},
+	// }
+	sb.Where = []string{"`t2`.`id`=?"}
 
 	var b bytes.Buffer
 	assert.NoError(t, db.queryJsonWriterRow(&b, sb, []interface{}{t2r1Id}))
@@ -135,42 +135,6 @@ func TestJoinMultipleLabels(t *testing.T) {
 	var b bytes.Buffer
 	assert.NoError(t, db.queryJsonWriterRow(&b, sb, []interface{}{t2r1Id}))
 	assert.Contains(t, b.String(), "1|T1 Row 1")
-}
-
-func TestBackup(t *testing.T) {
-	db, err := NewDatabase("file::memory:?cache=shared",
-		Log(log.Default()))
-	assert.NoError(t, err)
-	defer db.Close()
-
-	_, err = db.DB.Exec(`
-	CREATE TABLE test (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		text TEXT
-	)`)
-	assert.NoError(t, err)
-	db.Refresh()
-
-	rows := 100
-
-	m := make(map[string]interface{})
-	for i := 1; i <= rows; i++ {
-		m["text"] = fmt.Sprintf("Item %d", i)
-		_, err = db.InsertMap("test", m, nil)
-		assert.NoError(t, err)
-	}
-
-	fname := "./database.backup.db"
-	os.Remove(fname)
-	assert.NoError(t, db.Backup(fname))
-
-	d, err := sqlx.Open("sqlite3", fname)
-	assert.NoError(t, err)
-	defer d.Close()
-
-	var c int
-	assert.NoError(t, d.Get(&c, "SELECT COUNT(*) FROM test"))
-	assert.Equal(t, c, rows)
 }
 
 func TestNoneIdPrimaryKey(t *testing.T) {
@@ -421,6 +385,46 @@ tables:
 	// assert.NoError(t, db.queryJsonWriterRow(&b, bqc))
 	assert.Equal(t, `{"id":3,"item_RefTable":[{"id":3,"invId":"3","qty":1,"text":"Item 3.1"},{"id":4,"invId":"3","qty":25,"text":"Item 3.2"}],"title":"Joined"}`, b.String())
 	// t.Log(b.String())
+}
+
+func TestMultipleCallsToAddRefFields(t *testing.T) {
+	const yaml = `
+tables:
+  inv:
+    id:
+    title:
+  item:
+    id:
+    invId:
+      ref: inv.id/title
+    text:
+    qty:
+      type: integer
+      min: 0
+      default: 1
+`
+	db, err := NewDatabase("file::memory:?cache=shared",
+		YamlConfig([]byte(yaml)),
+		Log(log.Default()),
+		// DebugLog(log.Default()),
+	)
+	assert.NoError(t, err)
+	defer db.Close()
+
+	sb := NewSelectBuilder("item", []string{"id", "invId", "title"})
+	sb2 := NewSelectBuilder("item", []string{"id", "invId", "title"})
+	assert.Equal(t, sb, sb2)
+
+	db.AddRefLabels(sb, "")
+	assert.NotEqual(t, sb, sb2)
+
+	db.AddRefLabels(sb2, "")
+	assert.Equal(t, sb, sb2)
+
+	// Add again!
+	db.AddRefLabels(sb2, "")
+	assert.Equal(t, sb, sb2)
+
 }
 
 func WIPTestUniqueIndex(t *testing.T) {

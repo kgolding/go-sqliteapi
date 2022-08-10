@@ -63,28 +63,17 @@ func (d *Database) PostSQL(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		d.debugLog.Printf("AA PostSQL: SQL:\n%s\nArgs (%d): %s", data.SQL, len(data.Args), data.Args)
 		// Handle array args as used by IN ?
 		data.SQL, data.Args, err = sqlx.In(data.SQL, data.Args...)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		// for i, a := range data.Args {
-		// 	switch v := a.(type) {
-		// 	case []interface{}:
-		// 		strs := []string{}
-		// 		for _, x := range v {
-		// 			strs = append(strs, fmt.Sprintf("%v", x))
-		// 		}
-		// 		data.Args[i] = "'" + strings.Join(strs, "','") + "'"
-		// 	}
-		// }
 	}
 
-	// @TODO Restrict/Sanitise SQL ?
+	// @TODO Restrict/Sanitise SQL more ?
 
-	d.debugLog.Printf("BB PostSQL: SQL:\n%s\nArgs (%d): %s", data.SQL, len(data.Args), data.Args)
+	d.debugLog.Printf("PostSQL: SQL:\n%s\nArgs (%d): %s", data.SQL, len(data.Args), data.Args)
 
 	w.Header().Set("Content-Type", "application/json")
 	err = d.QueryJsonWriter(w, data.SQL, data.Args)

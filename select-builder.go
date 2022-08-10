@@ -6,6 +6,14 @@ import (
 	"strings"
 )
 
+func NewSelectBuilder(table string, fields []string) *SelectBuilder {
+	sb := &SelectBuilder{
+		From: table,
+	}
+	sb.SetSelectFieldsWithTable(fields)
+	return sb
+}
+
 type SelectBuilder struct {
 	// Fully quailified `table`.`field`
 	Select []string
@@ -54,6 +62,16 @@ const (
 	LEFT_OUTER = JoinType("LEFT OUTER")
 )
 
+func (sb *SelectBuilder) SetSelectFieldsWithTable(fields []string) {
+	for _, f := range fields {
+		if strings.HasPrefix(f, "`") {
+			sb.Select = append(sb.Select, f)
+		} else {
+			sb.Select = append(sb.Select, tableFieldWrapped(sb.From, f))
+		}
+	}
+}
+
 func (sb *SelectBuilder) ToSql() (string, error) {
 	// args := make([]interface{}, 0)
 
@@ -67,10 +85,8 @@ func (sb *SelectBuilder) ToSql() (string, error) {
 				s += ", "
 			}
 			if strings.HasPrefix(f, "`") {
-				// fmt.Printf("SB: '%s' => '%s'\n", f, f)
 				s += f
 			} else {
-				// fmt.Printf("SB: '%s' => '%s'\n", f, tableFieldWrapped(sb.From, f))
 				s += tableFieldWrapped(sb.From, f)
 			}
 		}

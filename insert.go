@@ -142,13 +142,6 @@ func (d *Database) insertMapWithTx(tx *sqlx.Tx, table string, data map[string]in
 									}
 								}
 
-							// case []interface{}: // simple array of key values
-							// 	xFields := []string{ref.ResultColKey().String()} // e.g. sessionThing.id
-							// 	xValues := []interface{}{data[ref.KeyField]}     // e.g. id
-
-							// 	sql := "INSERT INTO `" + t.Name + "` "
-							// 	sql += "(" + ref.ResultColKey().String() + ", "
-
 							default:
 								logf("unknown data type for %T for %s", x, k)
 							}

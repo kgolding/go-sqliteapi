@@ -13,8 +13,8 @@ const (
 	CONTROL_TEXTAREA = "textarea"
 	CONTROL_CHECKBOX = "checkbox"
 	CONTROL_HTML     = "html"
-	CONTROL_SELECT   = "select" // Requires options and/or LookupUri
-	CONTROL_RADIO    = "radio"  // Requires options and/or LookupUri
+	CONTROL_SELECT   = "select"
+	CONTROL_RADIO    = "radio"
 )
 
 func (d *Database) FieldValidation(table string, field string, value interface{}) error {

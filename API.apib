@@ -89,7 +89,7 @@ Returns an array of collection fields/columns for use building dynamic forms.
             "name": "roleId",
             "type": "integer",
             "notnull": true,
-            "references": "role.id/name",
+            "ref": "role.id/name",
             "control": "select"
           },
           {
@@ -97,9 +97,9 @@ Returns an array of collection fields/columns for use building dynamic forms.
             "type": "TEXT",
             "label": "Login/username",
             "notnull": true,
-            "minlen": 3,
-            "maxlen": 3,
-            "regexp": "^[a-z][a-z0-9]+$",
+            "min": 3,
+            "max": 3,
+            "regex": "^[a-z][a-z0-9]+$",
             "hint": "must start with a letter followed by letters/number only"
           },
         ]
@@ -111,7 +111,7 @@ Returns an array of collection fields/columns for use building dynamic forms.
         invalid table name 'notatable`
         ```
 
-## Collection items [/api/{collection_name}{?select,sort,where,limit,offset,format}]
+## Collection items [/api/{collection_name}{?select,sort,search,where,limit,offset,format}]
 
 When posting/putting data, errors may be returned, for example:
 
@@ -120,6 +120,8 @@ When posting/putting data, errors may be returned, for example:
 * `name: too short, must be at least 3 chars`
 
 ### Get collection items [GET]
+
+Fields with references will have a shadow field automatically added (suffixed `_RefLabel` to include the referenced table label field.
 
 + Parameters
     + collection_name (string) - Collection name
@@ -141,6 +143,8 @@ When posting/putting data, errors may be returned, for example:
           {
             "id": 1,
             "name": "Hello world!"
+            "table2Id": 1,
+            "table2Id_RefLabel": "value from joined table2",
           }
         ]
         ```

@@ -82,29 +82,29 @@ func (r Reference) ResultColKey(as string) ResultColumn {
 
 type ConfigField struct {
 	// Database
-	Name       string      `yaml:"name" json:"-"`
-	Type       string      `yaml:"type,omitempty" json:"-"`
-	NotNull    bool        `yaml:"notnull,omitempty" json:"-"`
-	Default    interface{} `yaml:"default,omitempty" json:"-"`
-	References string      `yaml:"references,omitempty" json:"references,omitempty"` // e.g. driver.id // FOREIGN KEY("driverId") REFERENCES "driver"("id")
-	PrimaryKey int         `yaml:"pk,omitempty" json:"-"`
+	Name       string      `json:"-"`
+	Type       string      `json:"-"`
+	NotNull    bool        `json:"-"`
+	Default    interface{} `json:"-"`
+	References string      `json:"ref,omitempty"` // e.g. driver.id // FOREIGN KEY("driverId") REFERENCES "driver"("id")
+	PrimaryKey int         `json:"-"`
 	Unique     bool        `json:"unique,omitempty"`
 
 	// UI
-	Label    string `yaml:"label,omitempty" json:"label,omitempty"`
-	Hidden   bool   `yaml:"hidden,omitempty" json:"hidden,omitempty"`
-	ReadOnly bool   `yaml:"readonly,omitempty" json:"readonly,omitempty"`
-	Hint     string `yaml:"hint,omitempty" json:"hint,omitempty"`
+	Label    string `json:"label,omitempty"`
+	Hidden   bool   `json:"hidden,omitempty"`
+	ReadOnly bool   `json:"readonly,omitempty"`
+	Hint     string `json:"hint,omitempty"`
 
 	// User interface
-	Control string `yaml:"control,omitempty" json:"control,omitempty"`
+	Control string `json:"control,omitempty"`
 	// Options   []*SelectOption `json:"options,omitempty"`
 
 	// Validation
-	Min    int            `yaml:"min,omitempty" json:"min,omitempty"`
-	Max    int            `yaml:"max,omitempty" json:"max,omitempty"`
-	Regex  string         `yaml:"regex,omitempty" json:"regex,omitempty"`
-	regexp *regexp.Regexp `yaml:"-" json:"-"`
+	Min    int            `json:"min,omitempty"`
+	Max    int            `json:"max,omitempty"`
+	Regex  string         `json:"regex,omitempty"`
+	regexp *regexp.Regexp `json:"-"`
 }
 
 func (c *Config) String() string {
@@ -367,9 +367,9 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 						f.NotNull = tf
 					case "default":
 						f.Default = removeQuotesIfString(y.Value)
-					case "references", "ref":
+					case "ref":
 						f.References = s
-					case "pk", "primarykey":
+					case "pk":
 						f.PrimaryKey = i
 					case "unique":
 						f.Unique = tf
@@ -377,7 +377,7 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 						f.Label = s
 					case "hidden":
 						f.Hidden = tf
-					case "readonly", "ro":
+					case "readonly":
 						f.ReadOnly = tf
 					case "hint":
 						f.Hint = s
@@ -387,7 +387,7 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 						f.Min = i
 					case "max":
 						f.Max = i
-					case "regexp", "regex", "reg":
+					case "regex":
 						f.Regex = s
 						f.regexp, err = regexp.Compile(s)
 						if err != nil {
