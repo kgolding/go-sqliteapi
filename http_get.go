@@ -1,14 +1,16 @@
-package gdb
+package sqliteapi
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"path"
 	"sort"
 	"strings"
 )
 
-func (d *Database) GetTableNames(w http.ResponseWriter, r *http.Request) {
+func (d *Database) HandleGetTableNames(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	ret := []string{}
@@ -20,26 +22,32 @@ func (d *Database) GetTableNames(w http.ResponseWriter, r *http.Request) {
 	enc.Encode(ret)
 }
 
-func (d *Database) GetRow(w http.ResponseWriter, r *http.Request) {
-	sb, args, err := d.SelectBuilderFromRequest(r, true)
+func (d *Database) HandleGetRow(w http.ResponseWriter, r *http.Request) {
+
+	pk := path.Base(r.URL.Path)
+	table := path.Base(path.Dir(r.URL.Path))
+
+	d.log.Printf("GetRow: Table: %s: PK Field: %s", table, pk)
+
+	m, err := d.GetMap(table, pk)
 	if err != nil {
-		d.log.Printf("GetRow: bad request: %s", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+		} else {
+			d.log.Printf("GetRow: Error: %s", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
 		return
 	}
-	d.debugLog.Printf("GetRow: sb: %#v\nArgs: %s\n", sb, args)
 
 	w.Header().Set("Content-Type", "application/json")
-	err = d.queryJsonWriterRow(w, sb, args)
-	if err != nil {
-		d.log.Printf("GetRow: Error: %s", err)
-		w.Write([]byte(err.Error()))
-	}
+	enc := json.NewEncoder(w)
+	enc.Encode(m)
 }
 
-func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {
+func (d *Database) HandleGetRows(w http.ResponseWriter, r *http.Request) {
 	if r.URL.RawQuery == "info" {
-		d.GetRowsInfo(w, r)
+		d.HandleGetRowsInfo(w, r)
 		return
 	}
 
@@ -94,7 +102,7 @@ type TableFieldInfoWithMetaData struct {
 	ConfigField
 }
 
-func (d *Database) GetRowsInfo(w http.ResponseWriter, r *http.Request) {
+func (d *Database) HandleGetRowsInfo(w http.ResponseWriter, r *http.Request) {
 	table := path.Base(r.URL.Path)
 	tableInfo, ok := d.dbInfo[table]
 	if !ok {

@@ -8,8 +8,18 @@
   * Field validation
 * API includes metadata to facilate dynamic GUI's
 * Live backup's
+* NoSQL like data when retriving an individual item, including sub RefLabel's. e.g. when retriving a single "Invoice" all the InvoiceItems would be returned in a virtual `InvoiceItems_RefTable` field. Posting the same data back will update both the "Invoice" and "InvoiceItem" tables
 
 See [API Reference](API.html)
+
+### Work in progress
+
+Many core features are working, with the following key items outstanding:
+
+* `unique` support when creating a table
+* Indexes
+* Hooks
+* User based access control
 
 ### Configuration
 

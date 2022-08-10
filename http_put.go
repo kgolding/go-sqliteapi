@@ -1,4 +1,4 @@
-package gdb
+package sqliteapi
 
 import (
 	"encoding/json"
@@ -6,7 +6,7 @@ import (
 	"path"
 )
 
-func (d *Database) PutRow(w http.ResponseWriter, r *http.Request) {
+func (d *Database) HandlePutRow(w http.ResponseWriter, r *http.Request) {
 	table := path.Base(path.Dir(r.URL.Path))
 	if !regName.MatchString(table) {
 		http.Error(w, "invalid table/view", http.StatusBadRequest)

@@ -1,4 +1,4 @@
-package gdb
+package sqliteapi
 
 import (
 	"fmt"
@@ -47,6 +47,12 @@ type Reference struct {
 	Table      string
 	KeyField   string
 	LabelField string
+}
+
+type BackReference struct {
+	SourceTable string
+	SourceField string
+	Reference
 }
 
 // https://regex101.com/r/wpohXh/1
@@ -296,6 +302,27 @@ func (c *Config) GetTable(name string) *ConfigTable {
 		}
 	}
 	return nil
+}
+
+func (c *Config) GetBackReferences(name string) []*BackReference {
+	ret := make([]*BackReference, 0)
+	for _, table := range c.Tables {
+		if table.Name != name {
+			for _, f := range table.Fields {
+				if f.References != "" {
+					ref, err := NewReference(f.References)
+					if err == nil && ref.Table == name {
+						ret = append(ret, &BackReference{
+							Reference:   *ref,
+							SourceTable: table.Name,
+							SourceField: f.Name,
+						})
+					}
+				}
+			}
+		}
+	}
+	return ret
 }
 
 func NewConfigFromYaml(b []byte) (*Config, error) {

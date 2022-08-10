@@ -1,4 +1,4 @@
-package gdb
+package sqliteapi
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -38,7 +39,7 @@ tables:
 	// Test row as json
 	j := `{"oid":"abc1","text":"ABC 1"}`
 
-	tsPost := httptest.NewServer(http.HandlerFunc(db.PostTable))
+	tsPost := httptest.NewServer(http.HandlerFunc(db.HandlePostTable))
 	defer tsPost.Close()
 
 	// Post and create a row
@@ -57,7 +58,7 @@ tables:
 	assert.Equal(t, string(b), "UNIQUE constraint failed: table1.oid\n")
 
 	// GetRows
-	tsRows := httptest.NewServer(http.HandlerFunc(db.GetRows))
+	tsRows := httptest.NewServer(http.HandlerFunc(db.HandleGetRows))
 	defer tsRows.Close()
 	res, err = http.Get(tsRows.URL + "/table1")
 	assert.NoError(t, err)
@@ -89,7 +90,7 @@ tables:
 	assert.Equal(t, []byte(`[["abc1","ABC 1"]]`), b)
 
 	// GetRows Info
-	tsTableNames := httptest.NewServer(http.HandlerFunc(db.GetTableNames))
+	tsTableNames := httptest.NewServer(http.HandlerFunc(db.HandleGetTableNames))
 	defer tsTableNames.Close()
 	res, err = http.Get(tsTableNames.URL)
 	assert.NoError(t, err)
@@ -107,7 +108,7 @@ tables:
 	assert.Equal(t, "oid,text\nabc1,ABC 1\n", string(b))
 
 	// GetRow
-	tsRow := httptest.NewServer(http.HandlerFunc(db.GetRow))
+	tsRow := httptest.NewServer(http.HandlerFunc(db.HandleGetRow))
 	defer tsRow.Close()
 	res, err = http.Get(tsRow.URL + "/table1/abc1")
 	assert.NoError(t, err)
@@ -116,10 +117,10 @@ tables:
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert.Equal(t, `{"oid":"abc1","table2_RefTable":[],"text":"ABC 1"}`, string(b))
+	assert.Equal(t, `{"oid":"abc1","table2_RefTable":[],"text":"ABC 1"}`, strings.TrimSpace(string(b)))
 
 	// Update row
-	tsPut := httptest.NewServer(http.HandlerFunc(db.PutRow))
+	tsPut := httptest.NewServer(http.HandlerFunc(db.HandlePutRow))
 	defer tsPut.Close()
 
 	client := &http.Client{}
@@ -148,7 +149,7 @@ tables:
 	assert.Equal(t, []byte("unknown key\n"), b)
 
 	// Post SQL
-	tsPostSQL := httptest.NewServer(http.HandlerFunc(db.PostSQL))
+	tsPostSQL := httptest.NewServer(http.HandlerFunc(db.HandlePostSQL))
 	defer tsPostSQL.Close()
 	buf := bytes.NewBufferString("SELECT * FROM table1")
 	req, err = http.NewRequest(http.MethodPost, tsPostSQL.URL, buf)
@@ -164,7 +165,7 @@ tables:
 	assert.Equal(t, "abc1", m[0]["oid"])
 
 	// Delete row
-	tsDelete := httptest.NewServer(http.HandlerFunc(db.DelRow))
+	tsDelete := httptest.NewServer(http.HandlerFunc(db.HandleDelRow))
 	defer tsDelete.Close()
 	req, err = http.NewRequest(http.MethodDelete, tsDelete.URL+"/table1/abc1", nil)
 	assert.NoError(t, err, "delete data")

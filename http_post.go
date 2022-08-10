@@ -1,17 +1,17 @@
-package gdb
+package sqliteapi
 
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"path"
-	"strconv"
 
 	"github.com/jmoiron/sqlx"
 )
 
-func (d *Database) PostTable(w http.ResponseWriter, r *http.Request) {
+func (d *Database) HandlePostTable(w http.ResponseWriter, r *http.Request) {
 	table := path.Base(r.URL.Path)
 	if !regName.MatchString(table) {
 		http.Error(w, "invalid table/view", http.StatusBadRequest)
@@ -36,7 +36,7 @@ func (d *Database) PostTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Write([]byte(strconv.Itoa(id)))
+	w.Write([]byte(fmt.Sprintf("%d", id)))
 
 	d.log.Printf("%s: Created row %d", table, id)
 }
@@ -46,7 +46,7 @@ type PostSQLStruct struct {
 	Args []interface{} `json:"args"`
 }
 
-func (d *Database) PostSQL(w http.ResponseWriter, r *http.Request) {
+func (d *Database) HandlePostSQL(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

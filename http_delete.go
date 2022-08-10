@@ -1,4 +1,4 @@
-package gdb
+package sqliteapi
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 	"path"
 )
 
-func (d *Database) DelRow(w http.ResponseWriter, r *http.Request) {
+func (d *Database) HandleDelRow(w http.ResponseWriter, r *http.Request) {
 	table := path.Base(path.Dir(r.URL.Path))
 	if !regName.MatchString(table) {
 		http.Error(w, "invalid table/view", http.StatusBadRequest)
