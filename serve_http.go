@@ -1,7 +1,6 @@
 package sqliteapi
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 )
