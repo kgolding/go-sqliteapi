@@ -1,4 +1,4 @@
-module github.com/kgolding/go-sqlapi
+module github.com/kgolding/go-sqliteapi
 
 go 1.18
 
