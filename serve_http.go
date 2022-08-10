@@ -22,13 +22,13 @@ func (d *Database) RegisterHandles(prefix string, mux *http.ServeMux) {
 func (d *Database) Handler(prefix string) http.Handler {
 	handler := muxServer{d}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Printf("Handler: %s '%s'\n", r.Method, r.URL.String())
+		// fmt.Printf("Handler: %s '%s'\n", r.Method, r.URL.String())
 		http.StripPrefix(prefix, handler).ServeHTTP(w, r)
 	})
 }
 
 func (s muxServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("ServeHTTP: %s '%s'\n", r.Method, r.URL.String())
+	// fmt.Printf("ServeHTTP: %s '%s'\n", r.Method, r.URL.String())
 
 	path := strings.Trim(r.URL.Path, "/")
 
