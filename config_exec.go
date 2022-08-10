@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -257,18 +258,22 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 	}
 
 	if noChanges {
-		debugf("No schema changes :)")
+		debugf(" :)")
 		err = nil
 		// Compare with previous config
 		var oldYaml []byte
 		err = d.DB.Get(&oldYaml, "SELECT config FROM gdb_config ORDER BY id DESC LIMIT 1")
-		if err != sql.ErrNoRows {
-			// No existing config
-		} else if err != nil {
-			return
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				debugf("No schema changes, no existing configs")
+			} else {
+				debugf("error getting old config: %s", err)
+			}
 		} else if bytes.Compare(b, oldYaml) == 0 {
+			debugf("No schema changes, old config matches new config")
 			// No need to save the config
 			return
+
 		}
 	}
 

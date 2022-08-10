@@ -85,6 +85,56 @@ func TestConfigApplyNew(t *testing.T) {
 	var row GdbConfigRow
 	assert.NoError(t, ret.StructScan(&row))
 	assert.True(t, row.ID == 1)
+
+	err = db.ApplyConfig(config1, nil)
+	assert.NoError(t, err)
+	err = db.ApplyConfig(config1, nil)
+	assert.NoError(t, err)
+	err = db.ApplyConfig(config1, nil)
+	assert.NoError(t, err)
+
+	ret = db.DB.QueryRowx("SELECT * FROM gdb_config")
+	assert.NoError(t, ret.StructScan(&row))
+	assert.True(t, row.ID == 1)
+}
+
+func TestConfigApplyYamlMultipleTimes(t *testing.T) {
+	cfg := []byte(`
+tables:
+  table1:
+    id:
+    createdAt:
+    text:
+      type: text
+      notnull: true
+      readonly: true
+      min: 1
+      max: 999
+      regex: \w+
+      ref: table2.id/title
+      control: select
+  table2:
+    id:
+    title:
+`)
+
+	defer os.Remove("temp.db")
+
+	for i := 1; i < 10; i++ {
+		db, err := NewDatabase("temp.db",
+			// Log(log.Default()),
+			// DebugLog(log.Default()),
+			YamlConfig(cfg),
+		)
+		assert.NoError(t, err)
+
+		ret := db.DB.QueryRowx("SELECT * FROM gdb_config ORDER BY id DESC")
+		var row GdbConfigRow
+		assert.NoError(t, ret.StructScan(&row))
+		assert.Equal(t, 1, row.ID)
+
+		db.Close()
+	}
 }
 
 func TestConfigApplyRemoveTable(t *testing.T) {
