@@ -29,15 +29,16 @@ func (d *Database) PostTable(w http.ResponseWriter, r *http.Request) {
 	// user := auth.GetUser(r)
 	var user User // BLANK USER
 
-	id, err := d.insertMap(table, data, user)
+	id, err := d.InsertMap(table, data, user)
 	if err != nil {
+		d.log.Printf("%s: Error creating row: %v", table, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	w.Write([]byte(strconv.Itoa(id)))
 
-	d.log.Printf("%s: Create row %d", table, id)
+	d.log.Printf("%s: Created row %d", table, id)
 }
 
 type PostSQLStruct struct {
@@ -88,6 +89,7 @@ func (d *Database) PostSQL(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	err = d.QueryJsonWriter(w, data.SQL, data.Args)
 	if err != nil {
+		d.log.Printf("Error executing SQL: %v", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

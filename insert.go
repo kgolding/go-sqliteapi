@@ -12,7 +12,7 @@ import (
 var ErrUnknownKey = errors.New("unknown key")
 var ErrUnknownTable = errors.New("unknown table/view")
 
-func (d *Database) insertMap(table string, data map[string]interface{}, user User) (int, error) {
+func (d *Database) InsertMap(table string, data map[string]interface{}, user User) (int, error) {
 	ctx, _ := context.WithTimeout(context.Background(), d.timeout)
 	tx, err := d.DB.BeginTxx(ctx, nil)
 	if err != nil {
@@ -56,8 +56,10 @@ func (d *Database) insertMapWithTx(tx *sqlx.Tx, table string, data map[string]in
 	fields := make([]string, 0)
 	values := make([]interface{}, 0)
 
-	// Unused data fields which we'll check for joined tables
+	// Unused data fields which we'll check later for joined tables
 	unusedDataFields := make([]string, 0)
+
+	// Populate the fields & args arrays
 	for k, v := range data {
 		used := false
 		for _, f := range tableInfo.Fields {
@@ -94,7 +96,7 @@ func (d *Database) insertMapWithTx(tx *sqlx.Tx, table string, data map[string]in
 	sql += " (" + strings.Join(fields, ",") + ")"
 	sql += " VALUES (?" + strings.Repeat(",?", len(values)-1) + ")"
 
-	logf("SQL: %s", sql)
+	logf("SQL: %s\nArgs: %v\n", sql, values)
 
 	res, err := tx.Exec(sql, values...)
 	if err != nil {
@@ -112,42 +114,44 @@ func (d *Database) insertMapWithTx(tx *sqlx.Tx, table string, data map[string]in
 	if d.config != nil {
 		for _, k := range unusedDataFields {
 			// See if the field name is a table e.g. "sessionThing"
-			if t := d.config.GetTable(k); t != nil {
-				logf("got join table %s", t.Name)
-				for _, f := range t.Fields {
-					logf("link table %s, checking field %s: %s vs %s.", t.Name, f.Name, f.References, table)
-					if strings.HasPrefix(f.References, table+".") { // Target table has a ref to the main table
-						ref, err := NewReference(f.References)
-						if err != nil {
-							logf("bad reference '%s' in joined table %s", f.References, t.Name)
-							continue
-						}
-						logf("link table %s.%s: %s", t.Name, f.Name, ref)
-						// Clear out existing records
-
-						tx.Exec("DELETE FROM `"+t.Name+"` WHERE `"+ref.KeyField+`" = ?`, data[ref.KeyField])
-						// We might have an array of id's or an array of map[string]interface{}
-						switch x := data[k].(type) {
-						case []map[string]interface{}:
-							for _, data2 := range x {
-								data2[f.Name] = data[ref.KeyField]
-								// fmt.Printf("f.Name: %s, ref.KeyField: %v, data: %#v\n", f.Name, ref.KeyField, data)
-								// fmt.Printf("INSERT JOIN TABLE '%s': %#v\n", t.Name, data2)
-								_, err := d.insertMapWithTx(tx, t.Name, data2, user)
-								if err != nil {
-									logf("%s: %s", f.References, err)
-								}
+			if strings.HasSuffix(k, RefTableSuffix) {
+				if t := d.config.GetTable(strings.TrimSuffix(k, RefTableSuffix)); t != nil {
+					logf("got join table %s", t.Name)
+					for _, f := range t.Fields {
+						logf("link table %s, checking field %s: %s vs %s.", t.Name, f.Name, f.References, table)
+						if strings.HasPrefix(f.References, table+".") { // Target table has a ref to the main table
+							ref, err := NewReference(f.References)
+							if err != nil {
+								logf("bad reference '%s' in joined table %s", f.References, t.Name)
+								continue
 							}
+							logf("link table %s.%s: %s", t.Name, f.Name, ref)
+							// Clear out existing records
 
-						// case []interface{}: // simple array of key values
-						// 	xFields := []string{ref.ResultColKey().String()} // e.g. sessionThing.id
-						// 	xValues := []interface{}{data[ref.KeyField]}     // e.g. id
+							tx.Exec("DELETE FROM `"+t.Name+"` WHERE `"+ref.KeyField+`" = ?`, data[ref.KeyField])
+							// We might have an array of id's or an array of map[string]interface{}
+							switch x := data[k].(type) {
+							case []map[string]interface{}:
+								for _, data2 := range x {
+									data2[f.Name] = data[ref.KeyField]
+									// fmt.Printf("f.Name: %s, ref.KeyField: %v, data: %#v\n", f.Name, ref.KeyField, data)
+									// fmt.Printf("INSERT JOIN TABLE '%s': %#v\n", t.Name, data2)
+									_, err := d.insertMapWithTx(tx, t.Name, data2, user)
+									if err != nil {
+										logf("%s: %s", f.References, err)
+									}
+								}
 
-						// 	sql := "INSERT INTO `" + t.Name + "` "
-						// 	sql += "(" + ref.ResultColKey().String() + ", "
+							// case []interface{}: // simple array of key values
+							// 	xFields := []string{ref.ResultColKey().String()} // e.g. sessionThing.id
+							// 	xValues := []interface{}{data[ref.KeyField]}     // e.g. id
 
-						default:
-							logf("unknown data type for %T for %s", x, k)
+							// 	sql := "INSERT INTO `" + t.Name + "` "
+							// 	sql += "(" + ref.ResultColKey().String() + ", "
+
+							default:
+								logf("unknown data type for %T for %s", x, k)
+							}
 						}
 					}
 				}
@@ -164,13 +168,13 @@ func (d *Database) insertMapWithTx(tx *sqlx.Tx, table string, data map[string]in
 	return int(id), nil
 }
 
-func (d *Database) updateMap(table string, data map[string]interface{}, user User) error {
+func (d *Database) UpdateMap(table string, data map[string]interface{}, user User) error {
 	logf := func(format string, args ...interface{}) {
-		d.log.Printf("updateMap: "+format, args...)
+		d.debugLog.Printf("updateMap: "+format, args...)
 	}
 
-	tableInfo, ok := d.dbInfo[table]
-	if !ok {
+	tableInfo := d.dbInfo.GetTableInfo(table)
+	if tableInfo == nil {
 		return ErrUnknownTable
 	}
 
@@ -257,20 +261,24 @@ func (d *Database) updateMap(table string, data map[string]interface{}, user Use
 	return nil
 }
 
-func (d *Database) delete(table string, key interface{}, user User) error {
-	logf := func(format string, args ...interface{}) {
-		d.debugLog.Printf("updateMap: "+format, args...)
-	}
-
+func (d *Database) Delete(table string, key interface{}, user User) error {
 	tableInfo := d.dbInfo.GetTableInfo(table)
 	if tableInfo == nil {
 		return ErrUnknownKey
 	}
 
+	var err error
+
+	defer func() {
+		if err != nil {
+			d.log.Printf("%s: Error deleting row where %s = '%v': %v", table, tableInfo.GetPrimaryKey().Field, key, err)
+		}
+	}()
+
+	var tx *sqlx.Tx
 	ctx, _ := context.WithTimeout(context.Background(), d.timeout)
-	tx, err := d.DB.BeginTxx(ctx, nil)
+	tx, err = d.DB.BeginTxx(ctx, nil)
 	if err != nil {
-		logf("error starting transaction: %s", err)
 		return err
 	}
 
@@ -284,11 +292,8 @@ func (d *Database) delete(table string, key interface{}, user User) error {
 	sql := "DELETE FROM `" + table + "`"
 	sql += " WHERE " + tableInfo.GetPrimaryKey().Field + "=?"
 
-	logf("SQL: %s", sql)
-
 	res, err := tx.Exec(sql, key)
 	if err != nil {
-		logf("error executing sql: %s", err)
 		tx.Rollback()
 		return err
 	}
@@ -302,14 +307,12 @@ func (d *Database) delete(table string, key interface{}, user User) error {
 
 	err = tx.Commit()
 	if err != nil {
-		logf("error committing: %s", err)
 		tx.Rollback()
 		return err
 	}
 
 	v, err := res.RowsAffected()
 	if err != nil {
-		logf("unable to read rows affected: %s", err)
 		tx.Rollback()
 		return err
 	}
@@ -318,7 +321,7 @@ func (d *Database) delete(table string, key interface{}, user User) error {
 		return ErrUnknownKey
 	}
 
-	d.log.Printf("%s: Delete row where %s = '%v'", table, tableInfo.GetPrimaryKey().Field, key)
+	d.log.Printf("%s: Deleted row where %s = '%v'", table, tableInfo.GetPrimaryKey().Field, key)
 
 	return nil
 }

@@ -21,15 +21,36 @@ func (d *Database) GetTableNames(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Database) GetRow(w http.ResponseWriter, r *http.Request) {
-	bqc, err := BuildQueryConfigFromRequest(r, true)
+	d.debugLog.Println("GetRow() ----------------------------------")
+	sb, args, err := d.SelectBuilderFromRequest(r, true)
 	if err != nil {
 		d.log.Printf("GetRow: bad request: %s", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	bqc.IncludeJunctions = true
+	d.debugLog.Printf("GetRow: sb: %#v\nArgs: %s\n", sb, args)
+
+	d.AddRefLabels(sb, "")
+
 	w.Header().Set("Content-Type", "application/json")
-	d.queryJsonWriterRow(w, bqc)
+	err = d.queryJsonWriterRow(w, sb, args)
+	if err != nil {
+		d.log.Printf("GetRow: Error: %s", err)
+		w.Write([]byte(err.Error()))
+	}
+
+	// bqc, err := BuildQueryConfigFromRequest(r, true)
+	// if err != nil {
+	// 	d.log.Printf("GetRow: bad request: %s", err)
+	// 	http.Error(w, err.Error(), http.StatusBadRequest)
+	// 	return
+	// }
+	// bqc.IncludeJunctions = true
+	// w.Header().Set("Content-Type", "application/json")
+	// err = d.queryJsonWriterRow(w, bqc)
+	// if err != nil {
+	// 	w.Write([]byte(err.Error()))
+	// }
 }
 
 func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {
@@ -38,20 +59,32 @@ func (d *Database) GetRows(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bqc, err := BuildQueryConfigFromRequest(r, false)
+	sb, args, err := d.SelectBuilderFromRequest(r, false)
+	if err != nil {
+		d.log.Printf("GetRows: bad request: %s", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	d.debugLog.Printf("GetRows: sb: %#v\nArgs: %s\n", sb, args)
+
+	d.AddRefLabels(sb, "")
+
+	q, err := sb.ToSql()
+
+	// bqc, err := BuildQueryConfigFromRequest(r, false)
 	if err != nil {
 		d.log.Printf("GetRows: bad request: %s", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	q, args, err := d.BuildQuery(bqc)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+	// q, args, err := d.BuildQuery(bqc)
+	// if err != nil {
+	// 	http.Error(w, err.Error(), http.StatusBadRequest)
+	// 	return
+	// }
 
-	d.debugLog.Printf("GetRow: SQL:\n%s\nArgs: %s", q, args)
+	d.debugLog.Printf("GetRows: SQL:\n%s\nArgs: %s", q, args)
 
 	// @TODO Maybe change this to use Content-Type ?
 	switch strings.ToLower(r.URL.Query().Get("format")) {

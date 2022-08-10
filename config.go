@@ -211,6 +211,15 @@ func (table *ConfigTable) CreateSQL() (string, error) {
 	return sql, nil
 }
 
+func (table *ConfigTable) PrimaryKey() string {
+	for _, f := range table.Fields {
+		if f.PrimaryKey > 0 {
+			return f.Name
+		}
+	}
+	return ""
+}
+
 func (a *ConfigField) CompareDbFields(b *TableFieldInfo) error {
 	if a.Name != b.Name {
 		return fmt.Errorf("name: '%s' != '%s'", a.Name, b.Name)

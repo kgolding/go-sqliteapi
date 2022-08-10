@@ -10,16 +10,12 @@ import (
 type ResultColumn struct {
 	Table string
 	Field string
-	Expr  string
 	As    string
 }
 
 // String returns a fully qualified string e.g. `table1`.`field1`
 // Including concating comma seperated fields
 func (rc ResultColumn) String() string {
-	if rc.Expr != "" {
-		return rc.Expr
-	}
 	fields := strings.Split(rc.Field, ",")
 	s := []string{}
 	for _, f := range fields {
@@ -39,14 +35,14 @@ func (rc ResultColumn) StringAs() string {
 	}
 }
 
-type ResultColumns []ResultColumn
+// type ResultColumns []ResultColumn
 
-// String returns a comma seperated fully qualified string including aliases
-// e.g. `table1`.`field1`, `table1`.`field2` AS `alias1`
-func (rcs ResultColumns) String() string {
-	s := make([]string, 0)
-	for _, rc := range rcs {
-		s = append(s, rc.StringAs())
-	}
-	return strings.Join(s, ", ")
-}
+// // String returns a comma seperated fully qualified string including aliases
+// // e.g. `table1`.`field1`, `table1`.`field2` AS `alias1`
+// func (rcs ResultColumns) String() string {
+// 	s := make([]string, 0)
+// 	for _, rc := range rcs {
+// 		s = append(s, rc.StringAs())
+// 	}
+// 	return strings.Join(s, ", ")
+// }

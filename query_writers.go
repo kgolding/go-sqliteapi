@@ -141,16 +141,21 @@ func (d *Database) QueryCsvWriter(w io.Writer, query string, args []interface{})
 }
 
 // queryJsonWriter runs the query and streams the result as json to the given Writer
-func (d *Database) queryJsonWriterRow(w io.Writer, bqc *BuildQueryConfig) error {
+func (d *Database) queryJsonWriterRow(w io.Writer, sb *SelectBuilder, args []interface{}) error {
 	tx, err := d.DB.Beginx()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback() // This is a query so we always rollback
 
-	query, args, err := d.BuildQuery(bqc)
+	d.AddRefLabels(sb, "")
 
-	d.debugLog.Printf("queryJsonWriterRow: BuildQueryConfig: %#v\n", bqc)
+	query, err := sb.ToSql()
+	if err != nil {
+		return err
+	}
+
+	d.debugLog.Printf("queryJsonWriterRow: query: %s\nArgs: %s", query, args)
 
 	row := tx.QueryRowx(query, args...)
 	if row == nil {
@@ -164,26 +169,57 @@ func (d *Database) queryJsonWriterRow(w io.Writer, bqc *BuildQueryConfig) error 
 		return err
 	}
 
-	for sqIndex, sq := range bqc.SubQueries {
-		sargs := make([]interface{}, 0)
-		for _, f := range sq.ArgFields {
-			sargs = append(sargs, ret[f])
-		}
-		srows, err := tx.Queryx(sq.Query, sargs...)
-		if err != nil {
-			return fmt.Errorf("sub-query %d: %w", sqIndex, err)
-		}
+	// For each select field, check to see if it is referenced to from other tables
+	d.debugLog.Printf("Select: %s\n", sb.Select)
+	d.debugLog.Printf("Config: %s\n", d.config.String())
+	for _, table2 := range d.config.Tables {
+		// d.debugLog.Printf("AAAAAAAAAAAAAAAAA. table: %s, field: %s, table2: %s\n", table, field, table2.Name)
+		for _, field2 := range table2.Fields {
+			if field2.References != "" {
+				ref, err := NewReference(field2.References)
+				if ref.Table == sb.From {
+					// d.debugLog.Printf("B. ref: %#v, err: %v\n", ref, err)
+					if err == nil {
+						ssb := &SelectBuilder{
+							From:  table2.Name,
+							Where: []string{tableFieldWrapped(table2.Name, field2.Name) + "=?"},
+						}
+						d.AddRefLabels(ssb, sb.From)
+						query, err := ssb.ToSql()
+						if err != nil {
+							return err
+						}
+						subArgs := make([]interface{}, 0)
+						subArgs = append(subArgs, ret[ref.KeyField])
+						// d.debugLog.Printf("C. Sub-query: %s\nArgs: %v", query, subArgs)
 
-		sret := make([]map[string]interface{}, 0)
-		for srows.Next() {
-			srow := make(map[string]interface{})
-			err = srows.MapScan(srow)
-			if err != nil {
-				return fmt.Errorf("sub-query %d: %w", sqIndex, err)
+						rows, err := tx.Queryx(query, subArgs...)
+						if err != nil {
+							return fmt.Errorf("sub-query '%s': %w", table2.Name, err)
+						}
+
+						subRet := make([]map[string]interface{}, 0)
+						for rows.Next() {
+							// d.debugLog.Printf("D. sub-query:\n")
+							m := make(map[string]interface{}, 0)
+							err = rows.MapScan(m)
+							// d.debugLog.Printf("E. sub-query: %v\n", m)
+							if err != nil {
+								return fmt.Errorf("sub-query '%s': %w", table2.Name, err)
+							}
+							subRet = append(subRet, m)
+							// d.debugLog.Printf("F: sub-query: add %v\n", m)
+						}
+						refFieldName := table2.Name + RefTableSuffix
+						if _, exists := ret[refFieldName]; exists {
+							refFieldName = table2.Name + "_" + field2.Name + RefTableSuffix
+						}
+						// d.debugLog.Printf("G. sub-query: set '%s' = %v\n", refFieldName, subRet)
+						ret[refFieldName] = subRet
+					}
+				}
 			}
-			sret = append(sret, srow)
 		}
-		ret[sq.Name] = sret
 	}
 
 	b, err := json.Marshal(ret)
@@ -237,6 +273,40 @@ func processFields_JSON(m map[string]interface{}) {
 					if x != nil {
 						newK := strings.TrimSuffix(k, "_JSON")
 						m[newK] = x
+					}
+				}
+			}
+		}
+	}
+}
+
+func (d *Database) AddRefLabels(sb *SelectBuilder, exclTable string) {
+	// d.debugLog.Printf("AddRefLabels: sb: %#v\n", sb)
+	if ct := d.config.GetTable(sb.From); ct != nil {
+		if len(sb.Select) == 0 {
+			for _, f := range ct.Fields {
+				sb.Select = append(sb.Select, tableFieldWrapped(ct.Name, f.Name))
+			}
+		}
+		// d.debugLog.Printf("AddRefLabels: ct.Fields: %#v\n", ct.Fields)
+		for _, selectField := range sb.Select {
+			// d.debugLog.Printf("AddRefLabels: selectField: %#v\n", selectField)
+			for _, f := range ct.Fields {
+				// d.debugLog.Printf("AddRefLabels: f: %#v\n", f)
+				if selectField == tableFieldWrapped(sb.From, f.Name) && f.References != "" {
+					ref, err := NewReference(f.References)
+					if err == nil && ref.LabelField != "" && ref.Table != exclTable {
+						sb.Select = append(sb.Select, ref.ResultColLabel(f.Name+RefLabelSuffix).StringAs())
+						sb.Joins = append(sb.Joins, Join{
+							Type:  LEFT_OUTER,
+							Table: ref.Table,
+							On: []JoinOn{
+								{
+									Field:       ref.KeyField,
+									ParentField: f.Name,
+								},
+							},
+						})
 					}
 				}
 			}

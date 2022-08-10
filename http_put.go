@@ -36,8 +36,9 @@ func (d *Database) PutRow(w http.ResponseWriter, r *http.Request) {
 	// user := auth.GetUser(r)
 	var user User // BLANK USER
 
-	err = d.updateMap(table, data, user)
+	err = d.UpdateMap(table, data, user)
 	if err != nil {
+		d.log.Printf("%s: Error updating row where %s = '%v': %v", table, tableInfo.GetPrimaryKey().Field, key, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
