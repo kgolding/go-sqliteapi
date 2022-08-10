@@ -1,6 +1,7 @@
 package sqliteapi
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -17,8 +18,17 @@ func (d *Database) RegisterHandles(prefix string, mux *http.ServeMux) {
 	mux.Handle(prefix+"/", http.StripPrefix(prefix, handler))
 }
 
+// Handler is called to add CRUD handlers to an existing mux mux.Handle("/api/", db.Handler("/api/"))
+func (d *Database) Handler(prefix string) http.Handler {
+	handler := muxServer{d}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Printf("Handler: %s '%s'\n", r.Method, r.URL.String())
+		http.StripPrefix(prefix, handler).ServeHTTP(w, r)
+	})
+}
+
 func (s muxServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// fmt.Printf("ServeHTTP: %s '%s'\n", r.Method, r.URL.String())
+	fmt.Printf("ServeHTTP: %s '%s'\n", r.Method, r.URL.String())
 
 	path := strings.Trim(r.URL.Path, "/")
 

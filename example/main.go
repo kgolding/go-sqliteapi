@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/kgolding/go-sqlapi"
+	"github.com/kgolding/go-sqliteapi"
 )
 
 const cfg = `
@@ -56,8 +56,7 @@ func main() {
 
 	// Create the http server
 	mux := http.NewServeMux()
-
-	db.RegisterHandles("/api", mux)
+	mux.Handle("/api/", db.Handler("/api/"))
 
 	err = http.ListenAndServe(":8090", mux)
 	if err != nil {
