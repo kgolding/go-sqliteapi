@@ -1,4 +1,4 @@
-# Go-SQLAPI
+# Go-SQLITEAPI
 
 ## Golang powered SQLite database access layer with API, migrations, foreign key lookup and joined tables
 
@@ -8,7 +8,7 @@
   * Field validation
 * API includes metadata to facilate dynamic GUI's
 * Live backup's
-* NoSQL like data when retriving an individual item, including sub RefLabel's. e.g. when retriving a single "Invoice" all the InvoiceItems would be returned in a virtual `InvoiceItems_RefTable` field. Posting the same data back will update both the "Invoice" and "InvoiceItem" tables
+* NoSQL like data when for individual items (GET, PUT, POST, DELETE), including for all \*_RefTable's. e.g. when retriving a single "Invoice" all the InvoiceItems would be returned in a virtual `InvoiceItems_RefTable` field. Posting/Putting the same data back will update both the "Invoice" and "InvoiceItem" tables (*_RefTable data replace all existing rows in the joined table, exclcude the field to retain existing data).
 
 See [API Reference](API.html)
 
