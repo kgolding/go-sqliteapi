@@ -54,7 +54,18 @@ tables:
 	assert.Equal(t, http.StatusBadRequest, res.StatusCode)
 	b, err := io.ReadAll(res.Body)
 	res.Body.Close()
-	assert.Equal(t, string(b), "UNIQUE constraint failed: table1.oid\n")
+	assert.Equal(t, "UNIQUE constraint failed: table1.oid\n", string(b))
+
+	// Post SQL and check result
+	tsSqlPost := httptest.NewServer(db.Handler(""))
+	defer tsSqlPost.Close()
+	data = bytes.NewBufferString("SELECT * FROM table1")
+	res, err = http.Post(tsSqlPost.URL, "text/plain", data)
+	assert.NoError(t, err, "posting data to create new row")
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	b, err = io.ReadAll(res.Body)
+	res.Body.Close()
+	assert.Equal(t, `[{"oid":"abc1","text":"ABC 1"}]`, string(b))
 
 	// GetRows
 	tsRows := httptest.NewServer(http.HandlerFunc(db.HandleGetRows))

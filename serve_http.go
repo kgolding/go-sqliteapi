@@ -1,7 +1,6 @@
 package sqliteapi
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 )
@@ -35,8 +34,7 @@ func (d *Database) Handler(prefix string) http.Handler {
 }
 
 func (s muxServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("ServeHTTP: %s '%s' '%s'\n", r.Method, r.URL.Path, s.prefix)
-
+	// fmt.Printf("ServeHTTP: %s '%s' '%s'\n", r.Method, r.URL.Path, s.prefix)
 	path := r.URL.Path
 	path = strings.TrimPrefix(path, s.prefix)
 	path = strings.Trim(path, "/")
@@ -45,8 +43,6 @@ func (s muxServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if path != "" {
 		parts = strings.Split(path, "/")
 	}
-
-	fmt.Printf("ServeHTTP: '%s' [%d] |%s|\n", path, len(parts), strings.Join(parts, "|"))
 
 	d := s.d
 	switch r.Method {
@@ -63,7 +59,14 @@ func (s muxServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case http.MethodPost:
-		d.HandlePostTable(w, r)
+		switch len(parts) {
+		case 0:
+			d.HandlePostSQL(w, r)
+		case 1:
+			d.HandlePostTable(w, r)
+		default:
+			http.Error(w, "too many path elements", http.StatusBadRequest)
+		}
 
 	case http.MethodPut:
 		d.HandlePutRow(w, r)
