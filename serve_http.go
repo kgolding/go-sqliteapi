@@ -1,42 +1,52 @@
 package sqliteapi
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 )
 
 type muxServer struct {
-	d *Database
+	prefix string
+	d      *Database
 }
 
 // RegisterHandles add all the required GET/POST/PUT/DELETE handlers on the mux using
 // the given prefix/pattern
 func (d *Database) RegisterHandles(prefix string, mux *http.ServeMux) {
-	handler := muxServer{d}
+	handler := muxServer{
+		prefix: prefix,
+		d:      d,
+	}
 
-	mux.Handle(prefix+"/", http.StripPrefix(prefix, handler))
+	mux.Handle(prefix+"/", handler)
 }
 
 // Handler is called to add CRUD handlers to an existing mux mux.Handle("/api/", db.Handler("/api/"))
 func (d *Database) Handler(prefix string) http.Handler {
-	handler := muxServer{d}
+	handler := muxServer{
+		prefix: prefix,
+		d:      d,
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// fmt.Printf("Handler: %s '%s'\n", r.Method, r.URL.String())
-		http.StripPrefix(prefix, handler).ServeHTTP(w, r)
+		handler.ServeHTTP(w, r)
 	})
 }
 
 func (s muxServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// fmt.Printf("ServeHTTP: %s '%s'\n", r.Method, r.URL.String())
+	fmt.Printf("ServeHTTP: %s '%s' '%s'\n", r.Method, r.URL.Path, s.prefix)
 
-	path := strings.Trim(r.URL.Path, "/")
+	path := r.URL.Path
+	path = strings.TrimPrefix(path, s.prefix)
+	path = strings.Trim(path, "/")
 
 	parts := []string{}
 	if path != "" {
 		parts = strings.Split(path, "/")
 	}
 
-	// fmt.Printf("ServeHTTP: '%s' [%d] |%s|\n", path, len(parts), strings.Join(parts, "|"))
+	fmt.Printf("ServeHTTP: '%s' [%d] |%s|\n", path, len(parts), strings.Join(parts, "|"))
 
 	d := s.d
 	switch r.Method {
