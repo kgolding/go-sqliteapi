@@ -24,13 +24,6 @@ func (d *Database) UpdateMap(table string, data map[string]interface{}, user Use
 		return err
 	}
 
-	err = d.runHooks(table, HookParams{table, data, HookBeforeUpdate, tx, user})
-	if err != nil {
-		logf("error running before insert hook: %s", err)
-		tx.Rollback()
-		return err
-	}
-
 	fields := []string{}           // Fields to set
 	pks := []string{}              // Primary keys
 	fieldValues := []interface{}{} // The values to fill in the ?'s
@@ -62,6 +55,13 @@ func (d *Database) UpdateMap(table string, data map[string]interface{}, user Use
 		return errors.New("no primary key fields")
 	}
 	// @todo check enough pk's?
+
+	err = d.runHooks(table, HookParams{table, pks[0], data, HookBeforeUpdate, tx, user})
+	if err != nil {
+		logf("error running before insert hook: %s", err)
+		tx.Rollback()
+		return err
+	}
 
 	sql := "UPDATE `" + table + "`"
 	sql += " SET " + strings.Join(fields, "=?,") + "=?"
@@ -114,7 +114,7 @@ func (d *Database) UpdateMap(table string, data map[string]interface{}, user Use
 		return err
 	}
 
-	err = d.runHooks(table, HookParams{table, data, HookAfterUpdate, tx, user})
+	err = d.runHooks(table, HookParams{table, pks[0], data, HookAfterUpdate, tx, user})
 	if err != nil {
 		logf("error running after hook: %s", err)
 		tx.Rollback()

@@ -19,6 +19,7 @@ type Map map[string]interface{}
 
 type HookParams struct {
 	Table  string
+	Key    interface{}
 	Data   Map
 	Action HookAction
 	Tx     *sqlx.Tx
@@ -33,7 +34,12 @@ func (a HookAction) String() string {
 }
 
 func (p *HookParams) String() string {
-	return fmt.Sprintf("HookParams: '%s' %s: %#v", p.Table, p.Action.String(), p.Data)
+	s := fmt.Sprintf("HookParams: Table '%s', Action: %s", p.Table, p.Action.String())
+	if p.Key != nil {
+		s += fmt.Sprintf(", Key value: %v", p.Key)
+	}
+	s += fmt.Sprintf("\nData: %v", p.Data)
+	return s
 }
 
 func (m Map) Set(field string, value interface{}) {

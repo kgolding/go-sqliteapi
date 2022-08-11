@@ -21,7 +21,7 @@ func (d *Database) InsertMap(table string, data map[string]interface{}, user Use
 		return 0, err
 	}
 
-	err = d.runHooks(table, HookParams{table, data, HookBeforeInsert, tx, user})
+	err = d.runHooks(table, HookParams{table, nil, data, HookBeforeInsert, tx, user})
 	if err != nil {
 		d.log.Printf("error running before before hook: %s", err)
 		return 0, err
@@ -39,7 +39,7 @@ func (d *Database) InsertMap(table string, data map[string]interface{}, user Use
 		return 0, err
 	}
 
-	err = d.runHooks(table, HookParams{table, data, HookAfterInsert, tx, user})
+	err = d.runHooks(table, HookParams{table, id, data, HookAfterInsert, tx, user})
 	if err != nil {
 		d.log.Printf("error running before before hook: %s", err)
 		return 0, err

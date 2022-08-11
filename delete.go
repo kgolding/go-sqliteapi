@@ -33,7 +33,7 @@ func (d *Database) Delete(table string, key interface{}, user User) error {
 		return err
 	}
 
-	err = d.runHooks(table, HookParams{table, data, HookBeforeDelete, tx, user})
+	err = d.runHooks(table, HookParams{table, key, data, HookBeforeDelete, tx, user})
 	if err != nil {
 		d.log.Printf("error running before delete hook: %s", err)
 		tx.Rollback()
@@ -79,7 +79,7 @@ func (d *Database) Delete(table string, key interface{}, user User) error {
 		return ErrUnknownKey
 	}
 
-	err = d.runHooks(table, HookParams{table, data, HookAfterDelete, nil, user})
+	err = d.runHooks(table, HookParams{table, key, data, HookAfterDelete, nil, user})
 	if err != nil {
 		d.log.Printf("error running after delete hook: %s", err)
 		return err

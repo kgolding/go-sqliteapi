@@ -55,7 +55,7 @@ tables:
 	defer close(hkCh)
 
 	db.AddHook("", func(p HookParams) error {
-		// t.Logf("Hook: %s", p.String())
+		t.Logf(p.String())
 		select {
 		case hkCh <- p:
 		default:
