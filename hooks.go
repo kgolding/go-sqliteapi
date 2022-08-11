@@ -18,10 +18,22 @@ type HookAction int
 type Map map[string]interface{}
 
 type HookParams struct {
+	Table  string
 	Data   Map
 	Action HookAction
 	Tx     *sqlx.Tx
 	User   User
+}
+
+func (a HookAction) String() string {
+	if action, ok := HookActionMap[a]; ok {
+		return action
+	}
+	return fmt.Sprintf("Action %d", a)
+}
+
+func (p *HookParams) String() string {
+	return fmt.Sprintf("HookParams: '%s' %s: %#v", p.Table, p.Action.String(), p.Data)
 }
 
 func (m Map) Set(field string, value interface{}) {
@@ -76,6 +88,16 @@ const (
 	HookAfterDelete
 )
 
+var HookActionMap = map[HookAction]string{
+	HookAllAction:    "All",
+	HookBeforeInsert: "Before insert",
+	HookBeforeUpdate: "Before update",
+	HookBeforeDelete: "Before delete",
+	HookAfterInsert:  "After insert",
+	HookAfterUpdate:  "After update",
+	HookAfterDelete:  "After delete",
+}
+
 type Hook struct {
 	Table string
 	Fn    HookFn
@@ -101,7 +123,7 @@ func (d *Database) AddHook(table string, fn HookFn) {
 func (d *Database) runHooks(table string, params HookParams) error {
 	var err error
 	for _, hook := range d.hooks {
-		if hook.Table == table {
+		if hook.Table == "" || hook.Table == "*" || hook.Table == table {
 			err = hook.Fn(params)
 			if err != nil {
 				return err

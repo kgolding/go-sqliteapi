@@ -37,6 +37,12 @@ func main() {
 	}
 	defer db.Close()
 
+	// Setup hooks
+	db.AddHook("", func(p sqliteapi.HookParams) error {
+		log.Printf("Hook: %s\n", p.String())
+		return nil
+	})
+
 	// Insert a sample invoice
 	db.InsertMap("invoice", map[string]interface{}{
 		"customer": "Fred Blogs",

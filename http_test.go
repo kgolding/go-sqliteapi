@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -28,7 +27,7 @@ tables:
       ref: table1.oid/text
 `
 	db, err := NewDatabase("file::memory:?cache=shared",
-		Log(log.Default()),
+		// Log(log.Default()),
 		// DebugLog(log.Default()),
 		YamlConfig([]byte(yaml)))
 	assert.NoError(t, err)

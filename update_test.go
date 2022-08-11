@@ -1,7 +1,6 @@
 package sqliteapi
 
 import (
-	"log"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,8 +26,8 @@ tables:
 `
 	db, err := NewDatabase("file::memory:?cache=shared",
 		YamlConfig([]byte(yaml)),
-		Log(log.Default()),
-		DebugLog(log.Default()),
+		// Log(log.Default()),
+		// DebugLog(log.Default()),
 	)
 	assert.NoError(t, err)
 	defer db.Close()

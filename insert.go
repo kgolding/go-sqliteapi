@@ -21,6 +21,12 @@ func (d *Database) InsertMap(table string, data map[string]interface{}, user Use
 		return 0, err
 	}
 
+	err = d.runHooks(table, HookParams{table, data, HookBeforeInsert, tx, user})
+	if err != nil {
+		d.log.Printf("error running before before hook: %s", err)
+		return 0, err
+	}
+
 	id, err := d.insertMapWithTx(tx, table, data, user)
 
 	if err != nil {
@@ -30,6 +36,12 @@ func (d *Database) InsertMap(table string, data map[string]interface{}, user Use
 
 	err = tx.Commit()
 	if err != nil {
+		return 0, err
+	}
+
+	err = d.runHooks(table, HookParams{table, data, HookAfterInsert, tx, user})
+	if err != nil {
+		d.log.Printf("error running before before hook: %s", err)
 		return 0, err
 	}
 
@@ -48,18 +60,14 @@ func (d *Database) insertMapWithTx(tx *sqlx.Tx, table string, data map[string]in
 		return 0, fmt.Errorf("unknown table name '%s'", table)
 	}
 
-	err := d.runHooks(table, HookParams{data, HookBeforeInsert, tx, user})
-	if err != nil {
-		logf("error running before before hook: %s", err)
-		return 0, err
-	}
-
 	// Create an array of fields and an equal array of values to use as args
 	fields := make([]string, 0)
 	values := make([]interface{}, 0)
 
 	// Unused data fields which we'll check later for joined tables
 	unusedDataFields := make([]string, 0)
+
+	var err error
 
 	// Populate the fields & args arrays
 	for k, v := range data {
@@ -152,12 +160,6 @@ func (d *Database) insertMapWithTx(tx *sqlx.Tx, table string, data map[string]in
 				}
 			}
 		}
-	}
-
-	err = d.runHooks(table, HookParams{data, HookAfterInsert, tx, user})
-	if err != nil {
-		logf("error running after insert hook: %s", err)
-		return 0, err
 	}
 
 	return id, nil

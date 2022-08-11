@@ -24,7 +24,7 @@ func (d *Database) UpdateMap(table string, data map[string]interface{}, user Use
 		return err
 	}
 
-	err = d.runHooks(table, HookParams{data, HookBeforeUpdate, tx, user})
+	err = d.runHooks(table, HookParams{table, data, HookBeforeUpdate, tx, user})
 	if err != nil {
 		logf("error running before insert hook: %s", err)
 		tx.Rollback()
@@ -107,16 +107,16 @@ func (d *Database) UpdateMap(table string, data map[string]interface{}, user Use
 		}
 	}
 
-	err = d.runHooks(table, HookParams{data, HookAfterUpdate, tx, user})
+	err = tx.Commit()
 	if err != nil {
-		logf("error running after hook: %s", err)
+		logf("error committing: %s", err)
 		tx.Rollback()
 		return err
 	}
 
-	err = tx.Commit()
+	err = d.runHooks(table, HookParams{table, data, HookAfterUpdate, tx, user})
 	if err != nil {
-		logf("error committing: %s", err)
+		logf("error running after hook: %s", err)
 		tx.Rollback()
 		return err
 	}

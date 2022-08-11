@@ -27,15 +27,15 @@ func (d *Database) Delete(table string, key interface{}, user User) error {
 		return err
 	}
 
-	// err = d.runHooks(table, HookParams{data, HookBeforeDelete, tx, user})
-	// if err != nil {
-	// 	logf("error running before hook: %s", err)
-	// 	tx.Rollback()
-	// 	return err
-	// }
-
 	data, err := d.GetMap(table, key)
 	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	err = d.runHooks(table, HookParams{table, data, HookBeforeDelete, tx, user})
+	if err != nil {
+		d.log.Printf("error running before delete hook: %s", err)
 		tx.Rollback()
 		return err
 	}
@@ -63,13 +63,6 @@ func (d *Database) Delete(table string, key interface{}, user User) error {
 		return err
 	}
 
-	// err = d.runHooks(table, HookParams{data, HookAfterDelete, tx, user})
-	// if err != nil {
-	// 	logf("error running after hook: %s", err)
-	// 	tx.Rollback()
-	// 	return err
-	// }
-
 	err = tx.Commit()
 	if err != nil {
 		tx.Rollback()
@@ -84,6 +77,12 @@ func (d *Database) Delete(table string, key interface{}, user User) error {
 
 	if v == 0 {
 		return ErrUnknownKey
+	}
+
+	err = d.runHooks(table, HookParams{table, data, HookAfterDelete, nil, user})
+	if err != nil {
+		d.log.Printf("error running after delete hook: %s", err)
+		return err
 	}
 
 	d.log.Printf("%s: Deleted row where %s = '%v'", table, tableInfo.GetPrimaryKey().Field, key)
