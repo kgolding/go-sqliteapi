@@ -18,6 +18,7 @@ tables:
   test:
     id:
     text:
+      label: Text
 `)),
 	)
 	assert.NoError(t, err)

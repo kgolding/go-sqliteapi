@@ -2,6 +2,7 @@ package sqliteapi
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"testing"
 
@@ -96,6 +97,58 @@ func TestConfigApplyNew(t *testing.T) {
 	ret = db.DB.QueryRowx("SELECT * FROM gdb_config")
 	assert.NoError(t, ret.StructScan(&row))
 	assert.True(t, row.ID == 1)
+}
+
+func TestConfigApplyTriggers(t *testing.T) {
+	cfg := []byte(`
+tables:
+  table1:
+    id:
+    text:
+    
+  history:
+    id:
+    createdAt:
+    table1Id:
+      type: integer
+      ref: table1.id/text
+    text:
+triggers:
+  triggerTable1Insert:
+    event: after insert
+    table: table1
+    statement: INSERT INTO history (table1Id, text) VALUES (new.id, new.text)
+  triggerTable1Update:
+    event: update
+    table: table1
+    statement: INSERT INTO history (table1Id, text) VALUES (new.id, new.text)`)
+
+	db, err := NewDatabase("file::memory:",
+		Log(log.Default()),
+		DebugLog(log.Default()),
+		YamlConfig(cfg),
+	)
+	assert.NoError(t, err)
+	defer db.Close()
+
+	t.Logf("%#v", db.config.Triggers)
+
+	var i int
+	assert.NoError(t, db.DB.Get(&i, "SELECT COUNT(*) FROM history"))
+	assert.Equal(t, 0, i)
+
+	id, err := db.InsertMap("table1", map[string]interface{}{"text": "Text 1"}, nil)
+	assert.NoError(t, err)
+
+	err = db.UpdateMap("table1", map[string]interface{}{"id": id, "text": "Text 1"}, nil)
+	assert.NoError(t, err)
+
+	assert.NoError(t, db.DB.Get(&i, "SELECT COUNT(*) FROM history"))
+	assert.Equal(t, 2, i)
+
+	assert.NoError(t, db.DB.Get(&i, "SELECT table1Id FROM history ORDER BY id DESC LIMIT 1"))
+	assert.Equal(t, 1, i)
+
 }
 
 func TestConfigApplyYamlMultipleTimes(t *testing.T) {

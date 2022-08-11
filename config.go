@@ -35,7 +35,8 @@ const (
 )
 
 type Config struct {
-	Tables []ConfigTable `yaml:"tables,omitempty"`
+	Tables   []ConfigTable   `yaml:"tables,omitempty"`
+	Triggers []ConfigTrigger `yaml:"triggers,omitempty"`
 }
 
 type ConfigTable struct {
@@ -43,10 +44,17 @@ type ConfigTable struct {
 	Fields []ConfigField `yaml:"fields"`
 }
 
+type ConfigTrigger struct {
+	Name      string `yaml:"name"`
+	Event     string `yaml:"event"` // DELETE, INSERT, UPDATE
+	Table     string `yaml:"table"`
+	Statement string `yaml:"statement"`
+}
+
 type Reference struct {
-	Table      string
-	KeyField   string
-	LabelField string
+	Table      string `yaml:"table"`
+	KeyField   string `yaml:"key"`
+	LabelField string `yaml:"label"`
 }
 
 type BackReference struct {
@@ -88,29 +96,29 @@ func (r Reference) ResultColKey(as string) ResultColumn {
 
 type ConfigField struct {
 	// Database
-	Name       string      `json:"-"`
-	Type       string      `json:"-"`
-	NotNull    bool        `json:"-"`
-	Default    interface{} `json:"-"`
-	References string      `json:"ref,omitempty"` // e.g. driver.id // FOREIGN KEY("driverId") REFERENCES "driver"("id")
-	PrimaryKey int         `json:"-"`
-	Unique     bool        `json:"unique,omitempty"`
+	Name       string      `yaml:"name" json:"-"`
+	Type       string      `yaml:"type" json:"-"`
+	NotNull    bool        `yaml:"notnull" json:"-"`
+	Default    interface{} `yaml:"default" json:"-"`
+	References string      `yaml:"ref" json:"ref,omitempty"` // e.g. driver.id // FOREIGN KEY("driverId") REFERENCES "driver"("id")
+	PrimaryKey int         `yaml:"pk" json:"-"`
+	Unique     bool        `yaml:"unique" json:"unique,omitempty"`
 
 	// UI
-	Label    string `json:"label,omitempty"`
-	Hidden   bool   `json:"hidden,omitempty"`
-	ReadOnly bool   `json:"readonly,omitempty"`
-	Hint     string `json:"hint,omitempty"`
+	Label    string `yaml:"label" json:"label,omitempty"`
+	Hidden   bool   `yaml:"hidden" json:"hidden,omitempty"`
+	ReadOnly bool   `yaml:"readonly" json:"readonly,omitempty"`
+	Hint     string `yaml:"hint" json:"hint,omitempty"`
 
 	// User interface
-	Control string `json:"control,omitempty"`
+	Control string `yaml:"control" json:"control,omitempty"`
 	// Options   []*SelectOption `json:"options,omitempty"`
 
 	// Validation
-	Min    int            `json:"min,omitempty"`
-	Max    int            `json:"max,omitempty"`
-	Regex  string         `json:"regex,omitempty"`
-	regexp *regexp.Regexp `json:"-"`
+	Min    int            `yaml:"min" json:"min,omitempty"`
+	Max    int            `yaml:"max" json:"max,omitempty"`
+	Regex  string         `yaml:"regex" json:"regex,omitempty"`
+	regexp *regexp.Regexp `yaml:"-" json:"-"`
 }
 
 func (c *Config) String() string {
@@ -127,6 +135,7 @@ func (c *Config) String() string {
 		a := make([][]string, 0)
 		a = append(a, []string{
 			"Name",
+			"Type",
 			"PK",
 			"Label",
 			"Control",
@@ -148,6 +157,7 @@ func (c *Config) String() string {
 			}
 			a = append(a, []string{
 				f.Name,
+				f.Type,
 				fmt.Sprintf("%d", f.PrimaryKey),
 				f.Label,
 				f.Control,
@@ -160,6 +170,10 @@ func (c *Config) String() string {
 			})
 		}
 		s += tabular(a)
+	}
+
+	for _, t := range c.Triggers {
+		s += fmt.Sprintf("Trigger %s\n", t.CreateSQL())
 	}
 
 	return s
@@ -189,6 +203,21 @@ func tabular(input [][]string) string {
 		s += "\n"
 	}
 	return s
+}
+
+func (trigger *ConfigTrigger) CreateSQL() string {
+	statement := trigger.Statement
+	if !strings.HasSuffix(statement, ";") {
+		statement += ";"
+	}
+
+	sql := "CREATE TRIGGER " + trigger.Name + "\n"
+	sql += trigger.Event + " ON " + trigger.Table + "\n"
+	sql += "FOR EACH ROW BEGIN\n"
+	sql += "\t" + statement + "\n"
+	sql += "END;"
+
+	return sql
 }
 
 func (table *ConfigTable) CreateSQL() (string, error) {
@@ -325,11 +354,89 @@ func (c *Config) GetBackReferences(name string) []*BackReference {
 	return ret
 }
 
+type YConfig struct {
+	Tables   map[string]map[string]ConfigField `yaml:"tables"`
+	Triggers map[string]ConfigTrigger          `yaml:"triggers"`
+}
+
 func NewConfigFromYaml(b []byte) (*Config, error) {
+	// if false {
+	// c := YConfig{}
+	// err := yaml.Unmarshal(b, &c)
+	// // spew.Dump(c)
+
+	// // Map the yaml structure to ours
+	// config := &Config{}
+	// for name, fields := range c.Tables {
+	// 	t := ConfigTable{
+	// 		Name: name,
+	// 	}
+	// 	for fname, f := range fields {
+	// 		// Apply defaults
+	// 		if f.Type == "" {
+	// 			f.Type = "TEXT"
+	// 		}
+	// 		// Apply specials
+	// 		if sf, ok := SpecialFields[fname]; ok {
+	// 			if f.Default == "" {
+	// 				f.Default = sf.Default
+	// 			}
+	// 			if f.Type == "" {
+	// 				f.Type = sf.Type
+	// 			}
+	// 			if f.Control == "" {
+	// 				f.Control = sf.Control
+	// 			}
+	// 			if f.Hidden {
+	// 				f.Hidden = sf.Hidden
+	// 			}
+	// 			if f.Hint == "" {
+	// 				f.Hint = sf.Hint
+	// 			}
+	// 			if f.Label == "" {
+	// 				f.Label = sf.Label
+	// 			}
+	// 			if f.Max == 0 {
+	// 				f.Max = sf.Max
+	// 			}
+	// 			if f.Min == 0 {
+	// 				f.Min = sf.Min
+	// 			}
+	// 			if f.PrimaryKey == 0 {
+	// 				f.PrimaryKey = sf.PrimaryKey
+	// 			}
+	// 			if f.ReadOnly {
+	// 				f.ReadOnly = sf.ReadOnly
+	// 			}
+	// 			if f.References == "" {
+	// 				f.References = sf.References
+	// 			}
+	// 		}
+	// 		f.Name = fname
+	// 		t.Fields = append(t.Fields, f)
+	// 	}
+	// 	config.Tables = append(config.Tables, t)
+	// }
+	// for name, trigger := range c.Triggers {
+	// 	trigger.Name = name
+	// 	config.Triggers = append(config.Triggers, trigger)
+	// }
+
+	// // println("=========================================================")
+	// // println(string(b))
+	// // println("---------------------------------------------------------")
+	// // println(config.String())
+	// // println("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+
+	// return config, err
+
+	// } else {
+
 	type Fields map[string]ConfigField
 
 	var c struct {
-		Tables map[string]yaml.MapSlice
+		Tables   map[string]yaml.MapSlice
+		Triggers map[string]yaml.MapSlice
 	}
 	err := yaml.Unmarshal(b, &c)
 	if err != nil {
@@ -431,9 +538,56 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 		cfg.Tables = append(cfg.Tables, t)
 	}
 
+	for triggerName, fields := range c.Triggers {
+		trigger := ConfigTrigger{
+			Name: triggerName,
+		}
+		for _, x := range fields {
+			name, ok := x.Key.(string)
+			if !ok {
+				return nil, fmt.Errorf("%s: field name is not a string! It is a %T (%v)", triggerName, x.Key, x.Key)
+			}
+			if x.Value != nil {
+				var s string
+				switch v := x.Value.(type) {
+				case string:
+					s = v
+				case []byte:
+					s = string(v)
+				case nil:
+					return nil, fmt.Errorf("%s.%s: field param missing", triggerName, name)
+				default:
+					s = fmt.Sprintf("%v", x.Value)
+				}
+				switch name {
+				case "event":
+					trigger.Event = strings.ToUpper(s)
+				case "table":
+					trigger.Table = s
+				case "statement":
+					trigger.Statement = s
+				default:
+					return nil, fmt.Errorf("%s: unknown field '%s'", triggerName, name)
+				}
+			}
+		}
+		cfg.Triggers = append(cfg.Triggers, trigger)
+	}
+
 	sort.Slice(cfg.Tables, func(a, b int) bool {
 		return cfg.Tables[a].Name < cfg.Tables[b].Name
 	})
 
+	sort.Slice(cfg.Triggers, func(a, b int) bool {
+		return cfg.Triggers[a].Name < cfg.Tables[b].Name
+	})
+
+	// println("=========================================================")
+	// println(string(b))
+	// println("---------------------------------------------------------")
+	// println(cfg.String())
+	// println("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+
 	return cfg, nil
+	// }
 }

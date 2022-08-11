@@ -252,6 +252,44 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 		}
 	}
 
+	// Triggers
+	if len(c.Triggers) > 0 {
+		rows, err := tx.Query(`
+		SELECT tbl_name, sql FROM sqlite_master
+		WHERE type=? AND name NOT LIKE "sqlite_%" AND name NOT LIKE "gdb_%"`, "trigger")
+		if err != nil {
+			return err
+		}
+		ts := make(map[string]string, 0)
+		for rows.Next() {
+			var name, sql string
+			err = rows.Scan(&name, &sql)
+			if err != nil {
+				return err
+			}
+			ts[name] = sql
+		}
+
+		for _, trigger := range c.Triggers {
+			fmt.Printf("+++ TRIGGER: %#v\n", trigger)
+			// Find exist and compare
+			if sql, ok := ts[trigger.Name]; ok {
+				if strings.TrimSpace(sql) == strings.TrimSpace(trigger.CreateSQL()) {
+					continue
+				}
+				_, err = tx.Exec("DROP TRIGGER ?", trigger.Name)
+				if err != nil {
+					return err
+				}
+			}
+			fmt.Println("APPLYING", trigger.CreateSQL())
+			_, err = tx.Exec(trigger.CreateSQL())
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	b, err := yaml.Marshal(c)
 	if err != nil {
 		return

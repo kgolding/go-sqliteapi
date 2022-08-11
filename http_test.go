@@ -18,7 +18,7 @@ func TestHttp(t *testing.T) {
 tables:
   table1:
     oid:
-      pk: true
+      pk: 1
       notnull: true
     text:
   table2:
