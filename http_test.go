@@ -192,6 +192,22 @@ tables:
 	assert.Len(t, m, 1)
 	assert.Equal(t, "abc1", m[0]["oid"])
 
+	// Post and create a second row
+	res, err = http.Post(tsPost.URL+"/table1", "Content-Type: application/json",
+		bytes.NewBufferString(`{"oid":"xyz","text":"XYZ"}`))
+	assert.NoError(t, err, "posting data to create second row")
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	b, err = io.ReadAll(res.Body)
+	res.Body.Close()
+	assert.Equal(t, []byte("2"), b)
+
+	res, err = http.Get(tsRows.URL + "/table1?where=" + url.QueryEscape("text=\"XYZ\""))
+	assert.NoError(t, err)
+	b, err = io.ReadAll(res.Body)
+	res.Body.Close()
+	assert.NoError(t, err)
+	assert.Equal(t, "[{\"oid\":\"xyz\",\"text\":\"XYZ\"}]", string(b))
+
 	// Delete row
 	tsDelete := httptest.NewServer(http.HandlerFunc(db.HandleDelRow))
 	defer tsDelete.Close()

@@ -64,6 +64,10 @@ func (d *Database) SelectBuilderFromRequest(r *http.Request, withKey bool) (*Sel
 		sb.Where = append(sb.Where, "("+strings.Join(conditions, " OR ")+")")
 	}
 
+	if s := r.URL.Query().Get("where"); s != "" {
+		sb.Where = append(sb.Where, s)
+	}
+
 	if s := r.URL.Query().Get("sort"); s != "" {
 		for _, e := range strings.Split(s, ",") {
 			m := regOrderBy.FindStringSubmatch(e)
