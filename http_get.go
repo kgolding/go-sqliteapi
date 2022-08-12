@@ -29,7 +29,7 @@ func (d *Database) HandleGetRow(w http.ResponseWriter, r *http.Request) {
 
 	d.debugLog.Printf("GetRow: Table: %s: PK Field: %s", table, pk)
 
-	m, err := d.GetMap(table, pk)
+	m, err := d.GetMap(table, pk, r.URL.Query().Has("withRefTable"))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, err.Error(), http.StatusNotFound)

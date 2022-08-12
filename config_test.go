@@ -219,7 +219,6 @@ func TestConfigApplyRemoveTable(t *testing.T) {
 	err = db.ApplyConfig(config1, OPT)
 	assert.NoError(t, err)
 	assert.NoError(t, InsertTable1Data(db))
-	assert.Len(t, db.dbInfo, 0) // Before refresh
 	assert.NoError(t, db.Refresh())
 	assert.Len(t, db.dbInfo, 2) // After refresh
 

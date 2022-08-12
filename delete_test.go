@@ -59,7 +59,7 @@ tables:
 	err = db.Delete("invoice", id, nil)
 	assert.NoError(t, err)
 
-	row, err := db.GetMap("invoice", id2)
+	row, err := db.GetMap("invoice", id2, true)
 	assert.NoError(t, err)
 	assert.Equal(t, inv1, row)
 

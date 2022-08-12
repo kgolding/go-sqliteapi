@@ -27,7 +27,7 @@ func (d *Database) Delete(table string, key interface{}, user User) error {
 		return err
 	}
 
-	data, err := d.GetMap(table, key)
+	data, err := d.GetMap(table, key, false)
 	if err != nil {
 		tx.Rollback()
 		return err

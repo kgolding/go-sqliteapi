@@ -54,7 +54,7 @@ tables:
 
 	inv1["id"] = id
 
-	row, err := db.GetMap("invoice", id)
+	row, err := db.GetMap("invoice", id, true)
 	assert.NoError(t, err)
 	assert.Equal(t, inv1, row)
 
@@ -66,7 +66,7 @@ tables:
 	assert.NoError(t, err)
 	assert.Equal(t, int64(2), id)
 
-	row2, err := db.GetMap("invoice", id)
+	row2, err := db.GetMap("invoice", id, true)
 	assert.NoError(t, err)
 	assert.NotEqual(t, inv1, row2)
 

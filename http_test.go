@@ -77,6 +77,14 @@ tables:
 	assert.NoError(t, err)
 	assert.Equal(t, []byte("["+j+"]"), b)
 
+	// GetRows select fields
+	res, err = http.Get(tsRows.URL + "/table1?select=oid,text")
+	assert.NoError(t, err)
+	b, err = io.ReadAll(res.Body)
+	res.Body.Close()
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("["+j+"]"), b)
+
 	res, err = http.Get(tsRows.URL + "/table1?search=" + url.QueryEscape("ABC%"))
 	assert.NoError(t, err)
 	b, err = io.ReadAll(res.Body)
@@ -120,7 +128,7 @@ tables:
 	// GetRow
 	tsRow := httptest.NewServer(http.HandlerFunc(db.HandleGetRow))
 	defer tsRow.Close()
-	res, err = http.Get(tsRow.URL + "/table1/abc1")
+	res, err = http.Get(tsRow.URL + "/table1/abc1?withRefTable")
 	assert.NoError(t, err)
 	b, err = io.ReadAll(res.Body)
 	res.Body.Close()
@@ -128,6 +136,16 @@ tables:
 		t.Fatal(err)
 	}
 	assert.Equal(t, `{"oid":"abc1","table2_RefTable":[],"text":"ABC 1"}`, strings.TrimSpace(string(b)))
+
+	// GetRow() returns all fields @TODO add select support
+	// res, err = http.Get(tsRow.URL + "/table1/abc1?select=oid")
+	// assert.NoError(t, err)
+	// b, err = io.ReadAll(res.Body)
+	// res.Body.Close()
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	// assert.Equal(t, `{"oid":"abc1"}`, strings.TrimSpace(string(b)))
 
 	// Update row
 	tsPut := httptest.NewServer(http.HandlerFunc(db.HandlePutRow))

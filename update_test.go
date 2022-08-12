@@ -55,7 +55,7 @@ tables:
 
 	err = db.UpdateMap("invoice", map[string]interface{}{"id": id, "customer": "ACME Inc."}, nil)
 	assert.NoError(t, err)
-	row, err := db.GetMap("invoice", id)
+	row, err := db.GetMap("invoice", id, true)
 	assert.NoError(t, err)
 	assert.NotEqual(t, inv1, row)
 
@@ -69,7 +69,7 @@ tables:
 	err = db.UpdateMap("invoice", inv1, nil)
 	assert.NoError(t, err)
 
-	row, err = db.GetMap("invoice", id)
+	row, err = db.GetMap("invoice", id, true)
 	assert.NoError(t, err)
 	assert.Equal(t, inv1, row)
 

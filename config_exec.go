@@ -86,9 +86,7 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 			return
 		}
 		err = tx.Commit()
-		if err != nil {
-			d.Refresh()
-		}
+		d.Refresh()
 	}()
 
 	// Remove tables
