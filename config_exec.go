@@ -202,8 +202,8 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 	// Triggers
 	if len(c.Triggers) > 0 {
 		rows, err := tx.Query(`
-			SELECT tbl_name, sql FROM sqlite_master
-			WHERE type=? AND name NOT LIKE "sqlite_%" AND name NOT LIKE "gdb_%"`, "trigger")
+			SELECT name, sql FROM sqlite_master
+			WHERE type="trigger" AND name NOT LIKE "sqlite_%" AND name NOT LIKE "gdb_%"`)
 		if err != nil {
 			return err
 		}
@@ -224,7 +224,7 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 					continue
 				}
 				debugf("DROPPING existing trigger: %s", trigger.Name)
-				_, err = tx.Exec("DROP TRIGGER ?", trigger.Name)
+				_, err = tx.Exec("DROP TRIGGER `" + trigger.Name + "`")
 				if err != nil {
 					return err
 				}
