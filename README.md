@@ -8,7 +8,7 @@
   * Field validation
 * API includes metadata to facilate dynamic GUI's
 * Live backup's
-* NoSQL like data when for individual items (GET, PUT, POST, DELETE), including for all \*_RefTable's. e.g. when retriving a single "Invoice" all the InvoiceItems would be returned in a virtual `InvoiceItems_RefTable` field. Posting/Putting the same data back will update both the "Invoice" and "InvoiceItem" tables (*_RefTable data replace all existing rows in the joined table, exclcude the field to retain existing data).
+* NoSQL like data when for individual items (GET, PUT, POST), including \*_RefTable's. e.g. when retriving a single "invoice" all the invoiceItems would be returned in a virtual `invoiceItems_RefTable` field. Posting/Putting the same data back will update both the "Invoice" and "invoiceItem" tables (*_RefTable data replace all existing rows in the joined table, exclude the field to retain existing data).
 
 See [API Reference](API.html)
 
@@ -16,34 +16,41 @@ See [API Reference](API.html)
 
 Many core features are working, with the following key items outstanding:
 
-* `unique` support when creating a table
 * Indexes
-* Hooks
 * User based access control
 
 ### Configuration
 
-Example configuration (YAML) for two tables
-* `tableA` has an autoincremented `id` primary key and a `text` field that must have a least 10 chars
-* `tableB` has a `code` primary key and a `aId` field that is a reference to the `tableA`.`id` field, that must be provided (notnull), and must exist in `tableA`
+Example configuration (YAML) for two tables, storing an invoice and it's items in a
+referenced table.
 
 ```
 tables:
-  tableA:
+  invoice:
     id:
-    createdAt:
-    text:
-      label: Text description
-      min: 10
-  tableB:
-    code:
-      pk: true
+    customer:
       notnull: true
-    aId:
-      label: Table A reference
-      ref: tableA.id/text
+      min: 4
+  invoiceItem:
+    id:
+    invoiceId:
+      type: integer
+      ref: invoice.id/customer
       notnull: true
+    qty:
+      type: integer
+      min: 0
+      notnull: true
+    item:
+      min: 3
+      notnull: true
+    cost:
+      type: number
+    	  notnull: true
 ```
+
+* `invoice.customer` is required and must be at least 4 chars in length
+* `invoiceItem.invoiceId` is tied to `invoice.id` using a Foreign key
 
 #### Fields
 
@@ -54,6 +61,7 @@ Fields can have the following attributes:
 * `type` SQLite type, defaults to `TEXT` see https://www.sqlite.org/datatype3.html
 * `pk` if true this field will be the primary key
 * `notnull` if true this field cannot be null
+* `unique` if true this field will have a unique index
 * `default` the SQLite default value
 * `ref` Foreign key/reference in the format `tableName`.`keyField`/`labelField`. e.g. `tableA.id/text`
   * `labelField` is one or more comma seperated fields from the referenced table that will be returned using an automatic join as a new field with the keyField name and a `_RefLabel` suffix e.g. `keyField_RefLabel`. Multiple labelField's will be seperated with a `|`

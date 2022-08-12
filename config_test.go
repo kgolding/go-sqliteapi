@@ -2,7 +2,6 @@ package sqliteapi
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"testing"
 
@@ -124,14 +123,12 @@ triggers:
     statement: INSERT INTO history (table1Id, text) VALUES (new.id, new.text)`)
 
 	db, err := NewDatabase("file::memory:",
-		Log(log.Default()),
-		DebugLog(log.Default()),
+		// Log(log.Default()),
+		// DebugLog(log.Default()),
 		YamlConfig(cfg),
 	)
 	assert.NoError(t, err)
 	defer db.Close()
-
-	t.Logf("%#v", db.config.Triggers)
 
 	var i int
 	assert.NoError(t, db.DB.Get(&i, "SELECT COUNT(*) FROM history"))
@@ -173,7 +170,12 @@ tables:
 
 	defer os.Remove("temp.db")
 
+	expectId := 1
 	for i := 1; i < 10; i++ {
+		if i == 2 {
+			cfg = append(cfg, []byte("      unique: true")...)
+			expectId++
+		}
 		db, err := NewDatabase("temp.db",
 			// Log(log.Default()),
 			// DebugLog(log.Default()),
@@ -184,7 +186,8 @@ tables:
 		ret := db.DB.QueryRowx("SELECT * FROM gdb_config ORDER BY id DESC")
 		var row GdbConfigRow
 		assert.NoError(t, ret.StructScan(&row))
-		assert.Equal(t, 1, row.ID)
+
+		assert.Equal(t, expectId, row.ID)
 
 		db.Close()
 	}

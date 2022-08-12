@@ -12,18 +12,24 @@ tables:
   invoice:
     id:
     customer:
+      notnull: true
+      min: 4
   invoiceItem:
     id:
     invoiceId:
       type: integer
       ref: invoice.id/customer
+      notnull: true
     qty:
       type: integer
       min: 0
+      notnull: true
     item:
       min: 3
+      notnull: true
     cost:
       type: number
+    	  notnull: true
 `
 
 func main() {
@@ -36,12 +42,6 @@ func main() {
 		panic(err)
 	}
 	defer db.Close()
-
-	// Setup hooks
-	db.AddHook("", func(p sqliteapi.HookParams) error {
-		log.Printf("Hook: %s\n", p.String())
-		return nil
-	})
 
 	// Insert a sample invoice
 	db.InsertMap("invoice", map[string]interface{}{
@@ -63,6 +63,8 @@ func main() {
 	// Create the http server
 	mux := http.NewServeMux()
 	mux.Handle("/api/", db.Handler("/api/"))
+
+	// Visit http://localhost:8090/api/invoice
 
 	err = http.ListenAndServe(":8090", mux)
 	if err != nil {

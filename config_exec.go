@@ -128,126 +128,76 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 				return
 			}
 			noChanges = false
-
-		} else { // MODIFY TABLE
-			change := false
-			// Check no change, same number of fields & all fields the same
-			if len(ot.Fields) == len(table.Fields) {
-				for i, of := range ot.Fields {
-					nf := table.Fields[i]
-					err := nf.CompareDbFields(&of)
-					if err != nil {
-						debugf("%s.%s: change trigger by: %s", table.Name, nf.Name, err)
-						change = true
-						break
-					}
-				}
-			} else {
-				change = true
+		} else { // Check for a difference in the create SQL
+			s, err = table.CreateSQL()
+			if err != nil {
+				return
 			}
 
-			if change {
-				debugf("APPLY: modify table %s\n", table.Name)
-				// Can we get away with just adding new fields?
-				// debugf("Old fields %d, New fields %d\n", len(ot.Fields), len(table.Fields))
-				bigChange := true
-				if len(ot.Fields) < len(table.Fields) {
-					justAdd := true
-					for i, of := range ot.Fields {
-						// debugf("Compare '%s':\na: %+v\nb: %+v\n", table.Name, of, table.Fields[i])
-						nf := table.Fields[i]
-						err := nf.CompareDbFields(&of)
-						if err != nil {
-							debugf("APPLY: MODIFY table %s: Big change because of field '%s': %s\n", table.Name, of.Name, err)
-							// debugf("nf: %+v\nof: %+v\n", nf, of)
-							justAdd = false
-							break
+			if strings.TrimSpace(s) != strings.TrimSpace(ot.SQL) { // MODIFY TABLE
+				debugf("APPLY: modify table %s: Big change\nA: %s\nB: %s", table.Name, s, ot.SQL)
+				// See item 7 at https://www.sqlite.org/lang_altertable.html
+
+				// @TODO use a temporary table?
+				// 1. Create new table with tmp name
+				tmpName := table.Name + "_tmp"
+				tableName := table.Name
+				debugf("APPLY: create table %s\n", tmpName)
+
+				// Create temp table SQL
+				table.Name = tmpName // Temp change name
+				s, err = table.CreateSQL()
+				table.Name = tableName // Change name back
+
+				if err != nil {
+					return
+				}
+				debugf("APPLY: EXEC SQL: '%s'", s)
+				_, err = tx.Exec(s)
+				if err != nil {
+					err = fmt.Errorf("error creating temporary table '%s': %w\n%s", tmpName, err, s)
+					return
+				}
+
+				// 2. Copy data
+				commonFields := []string{}
+				for _, f := range ot.Fields {
+					for _, f2 := range table.Fields {
+						if f.Name == f2.Name {
+							commonFields = append(commonFields, f.Name)
 						}
 					}
-
-					if justAdd {
-						var coldef string
-						debugf("APPLY: modify table %s: Just adding coldefs\n", table.Name)
-						for _, f := range table.Fields[len(ot.Fields):] {
-							coldef, err = f.ColDef()
-							if err != nil {
-								tx.Rollback()
-								return fmt.Errorf("bad field definition '%s' to '%s': %w", f.Name, table.Name, err)
-							}
-							s = "ALTER TABLE `" + table.Name + "` ADD COLUMN " + coldef
-							// fmt.Println(sql)
-							_, err = tx.Exec(s)
-							if err != nil {
-								err = fmt.Errorf("error adding column '%s' to '%s': %w", f.Name, table.Name, err)
-								return
-							}
-							noChanges = false
-						}
-						bigChange = false
+				}
+				if len(commonFields) > 0 {
+					fcvs := "`" + strings.Join(commonFields, "`,`") + "`"
+					s = fmt.Sprintf("INSERT INTO `%s` (%s) SELECT %s FROM `%s`",
+						tmpName, fcvs, fcvs, ot.Name)
+					debugf("APPLY: EXEC SQL: '%s'", s)
+					_, err = tx.Exec(s)
+					if err != nil {
+						err = fmt.Errorf("error copying data from '%s' to '%s': %w\n%s", ot.Name, tmpName, err, s)
+						return
 					}
 				}
 
-				if bigChange {
-					debugf("APPLY: modify table %s: Big change\n", table.Name)
-					// See item 7 at https://www.sqlite.org/lang_altertable.html
-
-					// 1. Create new table with tmp name
-					tmpName := table.Name + "_tmp"
-					tableName := table.Name
-					debugf("APPLY: create table %s\n", tmpName)
-					table.Name = tmpName // Temp change name
-					s, err = table.CreateSQL()
-					table.Name = tableName // Change name back
-					if err != nil {
-						return
-					}
-					debugf("APPLY: EXEC SQL: '%s'", s)
-					_, err = tx.Exec(s)
-					if err != nil {
-						err = fmt.Errorf("error creating temporary table '%s': %w\n%s", tmpName, err, s)
-						return
-					}
-
-					// 2. Copy data
-					commonFields := []string{}
-					for _, f := range ot.Fields {
-						for _, f2 := range table.Fields {
-							if f.Name == f2.Name {
-								commonFields = append(commonFields, f.Name)
-							}
-						}
-					}
-					if len(commonFields) > 0 {
-						fcvs := "`" + strings.Join(commonFields, "`,`") + "`"
-						s = fmt.Sprintf("INSERT INTO `%s` (%s) SELECT %s FROM `%s`",
-							tmpName, fcvs, fcvs, ot.Name)
-						debugf("APPLY: EXEC SQL: '%s'", s)
-						_, err = tx.Exec(s)
-						if err != nil {
-							err = fmt.Errorf("error copying data from '%s' to '%s': %w\n%s", ot.Name, tmpName, err, s)
-							return
-						}
-					}
-
-					// 3. Drop old table
-					s = fmt.Sprintf("DROP TABLE `%s`", ot.Name)
-					debugf("APPLY: EXEC SQL: '%s'", s)
-					_, err = tx.Exec(s)
-					if err != nil {
-						err = fmt.Errorf("error dropping old table '%s': %w\n%s", ot.Name, err, s)
-						return
-					}
-
-					// 4. Rename tmp
-					s = fmt.Sprintf("ALTER TABLE `%s` RENAME TO `%s`", tmpName, tableName)
-					debugf("APPLY: EXEC SQL: '%s'", s)
-					_, err = tx.Exec(s)
-					if err != nil {
-						err = fmt.Errorf("error renaming table '%s' to '%s': %w\n%s", tmpName, tableName, err, s)
-						return
-					}
-					noChanges = false
+				// 3. Drop old table
+				s = fmt.Sprintf("DROP TABLE `%s`", ot.Name)
+				debugf("APPLY: EXEC SQL: '%s'", s)
+				_, err = tx.Exec(s)
+				if err != nil {
+					err = fmt.Errorf("error dropping old table '%s': %w\n%s", ot.Name, err, s)
+					return
 				}
+
+				// 4. Rename tmp
+				s = fmt.Sprintf("ALTER TABLE `%s` RENAME TO `%s`", tmpName, tableName)
+				debugf("APPLY: EXEC SQL: '%s'", s)
+				_, err = tx.Exec(s)
+				if err != nil {
+					err = fmt.Errorf("error renaming table '%s' to '%s': %w\n%s", tmpName, tableName, err, s)
+					return
+				}
+				noChanges = false
 			}
 		}
 	}
@@ -255,8 +205,8 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 	// Triggers
 	if len(c.Triggers) > 0 {
 		rows, err := tx.Query(`
-		SELECT tbl_name, sql FROM sqlite_master
-		WHERE type=? AND name NOT LIKE "sqlite_%" AND name NOT LIKE "gdb_%"`, "trigger")
+			SELECT tbl_name, sql FROM sqlite_master
+			WHERE type=? AND name NOT LIKE "sqlite_%" AND name NOT LIKE "gdb_%"`, "trigger")
 		if err != nil {
 			return err
 		}
@@ -271,7 +221,6 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 		}
 
 		for _, trigger := range c.Triggers {
-			fmt.Printf("+++ TRIGGER: %#v\n", trigger)
 			// Find exist and compare
 			if sql, ok := ts[trigger.Name]; ok {
 				if strings.TrimSpace(sql) == strings.TrimSpace(trigger.CreateSQL()) {
@@ -282,7 +231,7 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 					return err
 				}
 			}
-			fmt.Println("APPLYING", trigger.CreateSQL())
+			debugf("APPLYING: %s", trigger.CreateSQL())
 			_, err = tx.Exec(trigger.CreateSQL())
 			if err != nil {
 				return err

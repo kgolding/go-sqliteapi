@@ -239,9 +239,9 @@ func (table *ConfigTable) CreateSQL() (string, error) {
 		}
 	}
 
-	sql := "CREATE TABLE " + table.Name + "(\n\t"
+	sql := "CREATE TABLE \"" + table.Name + "\" (\n\t"
 	sql += strings.Join(append(coldefs, forkeys...), ",\n\t")
-	sql += ");"
+	sql += ")"
 
 	return sql, nil
 }
@@ -284,6 +284,9 @@ func (f *ConfigField) ColDef() (string, error) {
 		datatype = "TEXT" // Default
 	}
 	s := fmt.Sprintf("`%s` %s", f.Name, datatype)
+	if f.Unique {
+		s += " UNIQUE"
+	}
 	if f.NotNull {
 		s += " NOT NULL"
 	}

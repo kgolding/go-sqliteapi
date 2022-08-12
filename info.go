@@ -12,6 +12,7 @@ type TableInfo struct {
 	IsView         bool             `json:"isView"`
 	Fields         []TableFieldInfo `json:"fields"`
 	IsPrimaryKeyId bool             `json:"isPkId"`
+	SQL            string           `json:"-"`
 }
 
 type TableFieldInfo struct {
@@ -79,16 +80,15 @@ func (d *Database) Refresh() error {
 
 	info := make(TableInfos)
 	rows, err := tx.Query(`
-		SELECT type, tbl_name FROM sqlite_master
+		SELECT type, tbl_name, sql FROM sqlite_master
 		WHERE type IN ("table", "view") AND name NOT LIKE "sqlite_%" AND name NOT LIKE "gdb_%" ORDER BY tbl_name
 	`)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
-		var t string
-		var n string
-		err = rows.Scan(&t, &n)
+		var t, n, s string
+		err = rows.Scan(&t, &n, &s)
 		if err != nil {
 			return err
 		}
@@ -97,6 +97,7 @@ func (d *Database) Refresh() error {
 			Name:   n,
 			IsView: t == "view",
 			Fields: make([]TableFieldInfo, 0),
+			SQL:    s,
 		}
 		frows, err := tx.Query(`PRAGMA TABLE_INFO("` + n + `");`)
 		if err != nil {
