@@ -69,11 +69,8 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 
 	defer func() {
 		s := "PRAGMA foreign_keys = ON"
-		_, err = d.DB.Exec(s)
-		if err != nil {
-			return
-		}
 		debugf("APPLY: EXEC SQL: '%s'", s)
+		d.DB.Exec(s)
 	}()
 
 	tx, err := d.DB.Beginx()
@@ -221,18 +218,20 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 		}
 
 		for _, trigger := range c.Triggers {
-			// Find exist and compare
+			// Find exist and compare or drop
 			if sql, ok := ts[trigger.Name]; ok {
 				if strings.TrimSpace(sql) == strings.TrimSpace(trigger.CreateSQL()) {
 					continue
 				}
+				debugf("DROPPING existing trigger: %s", trigger.Name)
 				_, err = tx.Exec("DROP TRIGGER ?", trigger.Name)
 				if err != nil {
 					return err
 				}
 			}
-			debugf("APPLYING: %s", trigger.CreateSQL())
-			_, err = tx.Exec(trigger.CreateSQL())
+			sql := trigger.CreateSQL()
+			debugf("APPLYING: %s", sql)
+			_, err = tx.Exec(sql)
 			if err != nil {
 				return err
 			}

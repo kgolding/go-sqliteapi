@@ -26,10 +26,9 @@ func TestNew(t *testing.T) {
 }
 
 func TestJoin(t *testing.T) {
-	db, err := NewDatabase("file::memory:",
-		Log(log.Default()),
-		// DebugLog(log.Default()),
-	)
+	db, err := NewDatabase("file::memory:") // Log(log.Default()),
+	// DebugLog(log.Default()),
+
 	assert.NoError(t, err)
 	defer db.Close()
 
@@ -84,8 +83,8 @@ func TestJoin(t *testing.T) {
 }
 
 func TestJoinMultipleLabels(t *testing.T) {
-	db, err := NewDatabase("file::memory:",
-		Log(log.Default()))
+	db, err := NewDatabase("file::memory:") // Log(log.Default()),
+
 	assert.NoError(t, err)
 	defer db.Close()
 

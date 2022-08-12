@@ -27,7 +27,7 @@ func (d *Database) HandleGetRow(w http.ResponseWriter, r *http.Request) {
 	pk := path.Base(r.URL.Path)
 	table := path.Base(path.Dir(r.URL.Path))
 
-	d.log.Printf("GetRow: Table: %s: PK Field: %s", table, pk)
+	d.debugLog.Printf("GetRow: Table: %s: PK Field: %s", table, pk)
 
 	m, err := d.GetMap(table, pk)
 	if err != nil {

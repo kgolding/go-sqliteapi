@@ -112,15 +112,17 @@ tables:
       type: integer
       ref: table1.id/text
     text:
+    
 triggers:
   triggerTable1Insert:
-    event: after insert
     table: table1
+    event: after insert
     statement: INSERT INTO history (table1Id, text) VALUES (new.id, new.text)
   triggerTable1Update:
-    event: update
     table: table1
-    statement: INSERT INTO history (table1Id, text) VALUES (new.id, new.text)`)
+    event: update of text
+    statement: INSERT INTO history (table1Id, text) VALUES (new.id, new.text)
+`)
 
 	db, err := NewDatabase("file::memory:",
 		// Log(log.Default()),

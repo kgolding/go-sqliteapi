@@ -2,7 +2,6 @@ package sqliteapi
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"testing"
 
@@ -12,7 +11,7 @@ import (
 
 func TestBackup(t *testing.T) {
 	db, err := NewDatabase("file::memory:?cache=shared",
-		Log(log.Default()),
+		// Log(log.Default()),
 		YamlConfig([]byte(`
 tables:
   test:

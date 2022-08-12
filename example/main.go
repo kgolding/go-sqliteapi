@@ -29,7 +29,7 @@ tables:
       notnull: true
     cost:
       type: number
-    	  notnull: true
+      notnull: true
 `
 
 func main() {
@@ -43,7 +43,7 @@ func main() {
 	}
 	defer db.Close()
 
-	// Insert a sample invoice
+	// Insert a sample invoice every time we run
 	db.InsertMap("invoice", map[string]interface{}{
 		"customer": "Fred Blogs",
 		"invoiceItem_RefTable": []map[string]interface{}{

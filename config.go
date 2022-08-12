@@ -363,78 +363,6 @@ type YConfig struct {
 }
 
 func NewConfigFromYaml(b []byte) (*Config, error) {
-	// if false {
-	// c := YConfig{}
-	// err := yaml.Unmarshal(b, &c)
-	// // spew.Dump(c)
-
-	// // Map the yaml structure to ours
-	// config := &Config{}
-	// for name, fields := range c.Tables {
-	// 	t := ConfigTable{
-	// 		Name: name,
-	// 	}
-	// 	for fname, f := range fields {
-	// 		// Apply defaults
-	// 		if f.Type == "" {
-	// 			f.Type = "TEXT"
-	// 		}
-	// 		// Apply specials
-	// 		if sf, ok := SpecialFields[fname]; ok {
-	// 			if f.Default == "" {
-	// 				f.Default = sf.Default
-	// 			}
-	// 			if f.Type == "" {
-	// 				f.Type = sf.Type
-	// 			}
-	// 			if f.Control == "" {
-	// 				f.Control = sf.Control
-	// 			}
-	// 			if f.Hidden {
-	// 				f.Hidden = sf.Hidden
-	// 			}
-	// 			if f.Hint == "" {
-	// 				f.Hint = sf.Hint
-	// 			}
-	// 			if f.Label == "" {
-	// 				f.Label = sf.Label
-	// 			}
-	// 			if f.Max == 0 {
-	// 				f.Max = sf.Max
-	// 			}
-	// 			if f.Min == 0 {
-	// 				f.Min = sf.Min
-	// 			}
-	// 			if f.PrimaryKey == 0 {
-	// 				f.PrimaryKey = sf.PrimaryKey
-	// 			}
-	// 			if f.ReadOnly {
-	// 				f.ReadOnly = sf.ReadOnly
-	// 			}
-	// 			if f.References == "" {
-	// 				f.References = sf.References
-	// 			}
-	// 		}
-	// 		f.Name = fname
-	// 		t.Fields = append(t.Fields, f)
-	// 	}
-	// 	config.Tables = append(config.Tables, t)
-	// }
-	// for name, trigger := range c.Triggers {
-	// 	trigger.Name = name
-	// 	config.Triggers = append(config.Triggers, trigger)
-	// }
-
-	// // println("=========================================================")
-	// // println(string(b))
-	// // println("---------------------------------------------------------")
-	// // println(config.String())
-	// // println("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-
-	// return config, err
-
-	// } else {
-
 	type Fields map[string]ConfigField
 
 	var c struct {
@@ -564,7 +492,7 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 				}
 				switch name {
 				case "event":
-					trigger.Event = strings.ToUpper(s)
+					trigger.Event = s // No ToUpper as might have a field name in it e.g. "INSERT ON fieldName"
 				case "table":
 					trigger.Table = s
 				case "statement":
@@ -592,5 +520,4 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 	// println("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
 
 	return cfg, nil
-	// }
 }
