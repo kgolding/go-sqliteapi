@@ -34,7 +34,6 @@ func (d *Database) Handler(prefix string) http.Handler {
 }
 
 func (s muxServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// fmt.Printf("ServeHTTP: %s '%s' '%s'\n", r.Method, r.URL.Path, s.prefix)
 	path := r.URL.Path
 	path = strings.TrimPrefix(path, s.prefix)
 	path = strings.Trim(path, "/")
@@ -43,6 +42,8 @@ func (s muxServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if path != "" {
 		parts = strings.Split(path, "/")
 	}
+
+	// fmt.Printf("ServeHTTP: %s '%s' '%s': parts: %s\n", r.Method, r.URL.Path, s.prefix, strings.Join(parts, ", "))
 
 	d := s.d
 	switch r.Method {
@@ -64,6 +65,12 @@ func (s muxServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			d.HandlePostSQL(w, r)
 		case 1:
 			d.HandlePostTable(w, r)
+		case 2:
+			if parts[0] == "_" {
+				d.HandlePostFunction(w, r)
+			} else {
+				http.Error(w, "too many path elements", http.StatusBadRequest)
+			}
 		default:
 			http.Error(w, "too many path elements", http.StatusBadRequest)
 		}

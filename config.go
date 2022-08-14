@@ -1,6 +1,7 @@
 package sqliteapi
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -35,8 +36,9 @@ const (
 )
 
 type Config struct {
-	Tables   []ConfigTable   `yaml:"tables,omitempty"`
-	Triggers []ConfigTrigger `yaml:"triggers,omitempty"`
+	Tables    []ConfigTable    `yaml:"tables,omitempty"`
+	Triggers  []ConfigTrigger  `yaml:"triggers,omitempty"`
+	Functions []ConfigFunction `yaml:"functions,omitempty"`
 }
 
 type ConfigTable struct {
@@ -49,6 +51,18 @@ type ConfigTrigger struct {
 	Event     string `yaml:"event"` // DELETE, INSERT, UPDATE
 	Table     string `yaml:"table"`
 	Statement string `yaml:"statement"`
+}
+
+type ConfigFunction struct {
+	Name       string                `yaml:"name"`
+	Params     []ConfigFunctionParam `yaml:"params"`
+	Statements []string              `yaml:"statements"`
+}
+
+type ConfigFunctionParam struct {
+	Name    string `yaml:"name"`
+	Notnull bool   `yaml:"notnull"`
+	Min     int64  `yaml:"min"`
 }
 
 type Reference struct {
@@ -130,7 +144,7 @@ func (c *Config) String() string {
 			q = "Error: " + err.Error()
 		}
 
-		s += fmt.Sprintf("Table `%s`\n%s\n", t.Name, q)
+		s += fmt.Sprintf("\nTable: `%s`\n", t.Name)
 
 		a := make([][]string, 0)
 		a = append(a, []string{
@@ -170,10 +184,24 @@ func (c *Config) String() string {
 			})
 		}
 		s += tabular(a)
+		s += q + "\n"
 	}
 
 	for _, t := range c.Triggers {
-		s += fmt.Sprintf("Trigger %s\n", t.CreateSQL())
+		s += fmt.Sprintf("\nTrigger %s\n", t.CreateSQL())
+	}
+
+	for _, f := range c.Functions {
+		s += fmt.Sprintf("\nFunction %s\n\tParams: ", f.Name)
+		for i, p := range f.Params {
+			if i > 0 {
+				s += ", "
+			}
+			s += p.Name
+		}
+		for _, x := range f.Statements {
+			s += "\n\t- " + x
+		}
 	}
 
 	return s
@@ -366,8 +394,9 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 	type Fields map[string]ConfigField
 
 	var c struct {
-		Tables   map[string]yaml.MapSlice
-		Triggers map[string]yaml.MapSlice
+		Tables    map[string]yaml.MapSlice
+		Triggers  map[string]yaml.MapSlice
+		Functions map[string]yaml.MapSlice
 	}
 	err := yaml.Unmarshal(b, &c)
 	if err != nil {
@@ -505,6 +534,80 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 		cfg.Triggers = append(cfg.Triggers, trigger)
 	}
 
+	/*
+	   function:
+	     setThingStatus:  								- functionName
+	       params:										- ps
+	         statusId:									- paramFields
+	           notnull: true								- f/v
+	           min: 1									- f/v
+	         thingId:
+	           notnull: true
+	           min: 1
+	         userId:
+	       statements:									- statements
+	         - UPDATE thing SET statusId=$1 WHERE id=$2
+	*/
+
+	for functionName, mFunction := range c.Functions {
+		function := ConfigFunction{
+			Name: functionName,
+		}
+		forEachMapSlice(mFunction, func(ps string, psValue interface{}) error {
+			switch ps {
+			case "params":
+				err = forEachMapSlice(psValue, func(f string, paramFields interface{}) error {
+					param := ConfigFunctionParam{
+						Name: f,
+					}
+					if paramFields != nil {
+						err = forEachMapSlice(paramFields, func(f string, v interface{}) error {
+							switch f {
+							case "notnull":
+								param.Notnull, err = toBool(v)
+								if err != nil {
+									return err
+								}
+							case "min":
+								param.Min, err = toInt(v)
+								if err != nil {
+									return err
+								}
+							}
+							return nil
+						})
+						if err != nil {
+							return err
+						}
+					}
+					function.Params = append(function.Params, param)
+					return nil
+				})
+				if err != nil {
+					return err
+				}
+
+			case "statements":
+				stmts, ok := psValue.([]interface{})
+				if !ok {
+					return fmt.Errorf("function %s.statements: not an array of strings: %#v", functionName, psValue)
+				}
+				for _, x := range stmts {
+					s, ok := x.(string)
+					if !ok {
+						return fmt.Errorf("function %s.statements: not a strings: %#v", functionName, x)
+					}
+					function.Statements = append(function.Statements, s)
+				}
+			}
+			return nil
+		})
+		cfg.Functions = append(cfg.Functions, function)
+	}
+	if err != nil {
+		return nil, err
+	}
+
 	sort.Slice(cfg.Tables, func(a, b int) bool {
 		return cfg.Tables[a].Name < cfg.Tables[b].Name
 	})
@@ -520,4 +623,68 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 	// println("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
 
 	return cfg, nil
+}
+
+func toInt(i interface{}) (int64, error) {
+	switch x := i.(type) {
+	case string:
+		return strconv.ParseInt(x, 10, 64)
+	case []byte:
+		return strconv.ParseInt(string(x), 10, 64)
+	case bool:
+		if x {
+			return 1, nil
+		} else {
+			return 0, nil
+		}
+	case int:
+		return int64(x), nil
+	case int64:
+		return x, nil
+	case nil:
+		return 0, errors.New("nil")
+	}
+	return 0, fmt.Errorf("unknown type %T: %v", i, i)
+}
+
+func toBool(i interface{}) (bool, error) {
+	switch x := i.(type) {
+	case string:
+		switch strings.ToLower(x) {
+		case "true", "1", "yes":
+			return true, nil
+		case "false", "0", "no":
+			return false, nil
+		}
+		return false, fmt.Errorf("unable to convert to bool: '%s'", x)
+	case []byte:
+		return toBool(string(x))
+	case bool:
+		return x, nil
+	case int:
+		return x != 0, nil
+	case int64:
+		return x != 0, nil
+	case nil:
+		return false, errors.New("nil")
+	}
+	return false, fmt.Errorf("unknown type %T: %v", i, i)
+}
+
+func forEachMapSlice(ms interface{}, fn func(name string, value interface{}) error) error {
+	x, ok := ms.(yaml.MapSlice)
+	if !ok {
+		return fmt.Errorf("not a mapslice: %#v", ms)
+	}
+	for _, ks := range x {
+		key, ok := ks.Key.(string)
+		if !ok {
+			return fmt.Errorf("not a string: %#v", key)
+		}
+		err := fn(key, ks.Value)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -92,16 +92,20 @@ const (
 	HookAfterInsert
 	HookAfterUpdate
 	HookAfterDelete
+	HookBeforeFunction
+	HookAfterFunction
 )
 
 var HookActionMap = map[HookAction]string{
-	HookAllAction:    "All",
-	HookBeforeInsert: "Before insert",
-	HookBeforeUpdate: "Before update",
-	HookBeforeDelete: "Before delete",
-	HookAfterInsert:  "After insert",
-	HookAfterUpdate:  "After update",
-	HookAfterDelete:  "After delete",
+	HookAllAction:      "All",
+	HookBeforeInsert:   "Before insert",
+	HookBeforeUpdate:   "Before update",
+	HookBeforeDelete:   "Before delete",
+	HookAfterInsert:    "After insert",
+	HookAfterUpdate:    "After update",
+	HookAfterDelete:    "After delete",
+	HookBeforeFunction: "Before function",
+	HookAfterFunction:  "After function",
 }
 
 type Hook struct {

@@ -40,12 +40,13 @@ func (d *Database) Delete(table string, key interface{}, user User) error {
 		return err
 	}
 
+	// @TODO replace this in the FORGEIN KEY??
 	for _, ref := range d.config.GetBackReferences(table) {
 		skey, ok := data[ref.KeyField]
 		if ok {
 			sql := "DELETE FROM `" + ref.SourceTable + "`"
 			sql += " WHERE " + ref.SourceField + "=?"
-
+			d.debugLog.Printf("SQL: %s\nArgs: %v\n", sql, skey)
 			_, err := tx.Exec(sql, skey)
 			if err != nil {
 				tx.Rollback()
@@ -56,7 +57,7 @@ func (d *Database) Delete(table string, key interface{}, user User) error {
 
 	sql := "DELETE FROM `" + table + "`"
 	sql += " WHERE " + tableInfo.GetPrimaryKey().Field + "=?"
-
+	d.debugLog.Printf("SQL: %s\nArgs: %v\n", sql, key)
 	res, err := tx.Exec(sql, key)
 	if err != nil {
 		tx.Rollback()

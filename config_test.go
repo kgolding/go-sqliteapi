@@ -100,7 +100,7 @@ func TestConfigApplyNew(t *testing.T) {
 }
 
 func TestConfigApplyTriggers(t *testing.T) {
-	cfg := []byte(`
+	yaml := []byte(`
 tables:
   table1:
     id:
@@ -128,7 +128,7 @@ triggers:
 	db, err := NewDatabase("file::memory:",
 		// Log(log.Default()),
 		// DebugLog(log.Default()),
-		YamlConfig(cfg),
+		YamlConfig(yaml),
 	)
 	assert.NoError(t, err)
 	defer db.Close()
@@ -149,10 +149,19 @@ triggers:
 	assert.NoError(t, db.DB.Get(&i, "SELECT table1Id FROM history ORDER BY id DESC LIMIT 1"))
 	assert.Equal(t, 1, i)
 
-	cfg2, err := NewConfigFromYaml(
-		[]byte(strings.Replace(string(cfg), "event: update of text", "event: UPDATE", 1)))
+	// Reapply config expect no version change
+	assert.NoError(t, db.DB.Get(&i, "PRAGMA user_version"))
+	cfg2, err := NewConfigFromYaml(yaml)
 	assert.NoError(t, err)
 	assert.NoError(t, db.ApplyConfig(cfg2, nil))
+	var newVersion int
+	assert.NoError(t, db.DB.Get(&newVersion, "PRAGMA user_version"))
+	assert.Equal(t, i, newVersion)
+
+	yaml2, err := NewConfigFromYaml(
+		[]byte(strings.Replace(string(yaml), "event: update of text", "event: UPDATE", 1)))
+	assert.NoError(t, err)
+	assert.NoError(t, db.ApplyConfig(yaml2, nil))
 
 	id, err = db.InsertMap("table1", map[string]interface{}{"text": "Text 2"}, nil)
 	assert.NoError(t, err)

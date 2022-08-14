@@ -34,6 +34,11 @@ type ConfigOptions struct {
 
 // ApplyConfig applies the config to the database - note that specialfields are not automatically expanded
 func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
+	debugf := func(format string, args ...interface{}) {
+		d.debugLog.Printf("ApplyConfig: "+format, args...)
+	}
+
+	debugf("START")
 	err = d.Refresh()
 	if err != nil {
 		return
@@ -53,24 +58,23 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 		}
 	}
 
-	debugf := func(format string, args ...interface{}) {
-		d.debugLog.Printf("ApplyConfig: "+format, args...)
-	}
+	debugf("dbInfo:\n%+v\n", d.dbInfo)
 
-	debugf("dbInfo: %+v\n", d.dbInfo)
-
+	// Disabling foreign keys must be done outside the transaction
 	s := "PRAGMA foreign_keys=OFF"
 	_, err = d.DB.Exec(s)
 	if err != nil {
 		err = fmt.Errorf("foreign_keys = OFF: %w", err)
 		return
 	}
-	debugf("APPLY: EXEC SQL: '%s'", s)
+	debugf("APPLY: EXEC SQL:\n%s", s)
 
 	defer func() {
 		s := "PRAGMA foreign_keys = ON"
-		debugf("APPLY: EXEC SQL: '%s'", s)
+		debugf("APPLY: EXEC SQL:\n%s", s)
 		d.DB.Exec(s)
+		d.Refresh()
+		debugf("FINISHED: err: %v", err)
 	}()
 
 	tx, err := d.DB.Beginx()
@@ -95,7 +99,7 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 			if t := c.GetTable(oldTable.Name); t == nil {
 				debugf("APPLY: dropping table %s\n", oldTable.Name)
 				s := fmt.Sprintf("DROP TABLE IF EXISTS `%s`", oldTable.Name)
-				debugf("APPLY: EXEC SQL: '%s'", s)
+				debugf("APPLY: EXEC SQL:\n%s", s)
 				_, err = tx.Exec(s)
 				if err != nil {
 					err = fmt.Errorf("error dropping table '%s': %w", oldTable.Name, err)
@@ -111,12 +115,12 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 	for _, table := range c.Tables {
 		ot := d.dbInfo.GetTableInfo(table.Name)
 		if ot == nil { // CREATE TABLE
-			debugf("APPLY: create table %s\n", table.Name)
+			debugf("create new table '%s'\n", table.Name)
 			s, err = table.CreateSQL()
 			if err != nil {
 				return
 			}
-			debugf("APPLY: EXEC SQL: '%s'", s)
+			debugf("APPLY: EXEC SQL:\n%s", s)
 			_, err = tx.Exec(s)
 			if err != nil {
 				err = fmt.Errorf("error creating table '%s': %w\n%s", table.Name, err, s)
@@ -137,7 +141,7 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 				// 1. Create new table with tmp name
 				tmpName := table.Name + "_tmp"
 				tableName := table.Name
-				debugf("APPLY: create table %s\n", tmpName)
+				debugf("create temp table %s\n", tmpName)
 
 				// Create temp table SQL
 				table.Name = tmpName // Temp change name
@@ -147,7 +151,7 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 				if err != nil {
 					return
 				}
-				debugf("APPLY: EXEC SQL: '%s'", s)
+				debugf("APPLY: EXEC SQL:\n%s", s)
 				_, err = tx.Exec(s)
 				if err != nil {
 					err = fmt.Errorf("error creating temporary table '%s': %w\n%s", tmpName, err, s)
@@ -167,7 +171,7 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 					fcvs := "`" + strings.Join(commonFields, "`,`") + "`"
 					s = fmt.Sprintf("INSERT INTO `%s` (%s) SELECT %s FROM `%s`",
 						tmpName, fcvs, fcvs, ot.Name)
-					debugf("APPLY: EXEC SQL: '%s'", s)
+					debugf("APPLY: EXEC SQL:\n%s", s)
 					_, err = tx.Exec(s)
 					if err != nil {
 						err = fmt.Errorf("error copying data from '%s' to '%s': %w\n%s", ot.Name, tmpName, err, s)
@@ -177,7 +181,7 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 
 				// 3. Drop old table
 				s = fmt.Sprintf("DROP TABLE `%s`", ot.Name)
-				debugf("APPLY: EXEC SQL: '%s'", s)
+				debugf("APPLY: EXEC SQL:\n%s", s)
 				_, err = tx.Exec(s)
 				if err != nil {
 					err = fmt.Errorf("error dropping old table '%s': %w\n%s", ot.Name, err, s)
@@ -186,7 +190,7 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 
 				// 4. Rename tmp
 				s = fmt.Sprintf("ALTER TABLE `%s` RENAME TO `%s`", tmpName, tableName)
-				debugf("APPLY: EXEC SQL: '%s'", s)
+				debugf("APPLY: EXEC SQL:\n%s", s)
 				_, err = tx.Exec(s)
 				if err != nil {
 					err = fmt.Errorf("error renaming table '%s' to '%s': %w\n%s", tmpName, tableName, err, s)
@@ -218,7 +222,10 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 		for _, trigger := range c.Triggers {
 			// Find exist and compare or drop
 			if sql, ok := ts[trigger.Name]; ok {
-				if strings.TrimSpace(sql) == strings.TrimSpace(trigger.CreateSQL()) {
+				t1 := strings.TrimSuffix(strings.TrimSpace(sql), ";")
+				t2 := strings.TrimSuffix(strings.TrimSpace(trigger.CreateSQL()), ";")
+				// fmt.Println("@@@@@@@@@@@@@@@@@\n", t1, "----------------\n", t2)
+				if t1 == t2 {
 					continue
 				}
 				debugf("DROPPING existing trigger: %s", trigger.Name)
@@ -226,10 +233,19 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 				if err != nil {
 					return err
 				}
+				delete(ts, trigger.Name)
 			}
-			sql := trigger.CreateSQL()
-			debugf("APPLYING: %s", sql)
-			_, err = tx.Exec(sql)
+			s := trigger.CreateSQL()
+			debugf("APPLY: EXEC SQL:\n%s", s)
+			_, err = tx.Exec(s)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Drop old triggers not in use
+		for name, _ := range ts {
+			_, err = tx.Exec("DROP TRIGGER `" + name + "`")
 			if err != nil {
 				return err
 			}
@@ -242,11 +258,11 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 	}
 
 	if noChanges {
-		debugf(" :)")
+		debugf(" no changes :)")
 		err = nil
 		// Compare with previous config
 		var oldYaml []byte
-		err = d.DB.Get(&oldYaml, "SELECT config FROM gdb_config ORDER BY id DESC LIMIT 1")
+		err = tx.Get(&oldYaml, "SELECT config FROM gdb_config ORDER BY id DESC LIMIT 1")
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				debugf("No schema changes, no existing configs")
@@ -256,8 +272,8 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 		} else if bytes.Compare(b, oldYaml) == 0 {
 			debugf("No schema changes, old config matches new config")
 			// No need to save the config
+			d.config = c
 			return
-
 		}
 	}
 
@@ -265,13 +281,18 @@ func (d *Database) ApplyConfig(c *Config, opts *ConfigOptions) (err error) {
 	h.Write(b)
 
 	var res sql.Result
-	res, err = tx.Exec("INSERT INTO gdb_config (config, hash) VALUES (?, ?)", b, h.Sum(nil))
+	s = "INSERT INTO gdb_config (config, hash) VALUES (?, ?)"
+	debugf("APPLY: EXEC SQL:\n%s\n", s)
+	res, err = tx.Exec(s, b, h.Sum(nil))
 	if err != nil {
+		debugf("error storing config: %s", err)
 		return
 	}
 
 	version, _ := res.LastInsertId()
-	tx.Exec(fmt.Sprintf("PRAGMA user_version=%d", version))
+	s = fmt.Sprintf("PRAGMA user_version=%d", version)
+	debugf("APPLY: EXEC SQL:\n%s", s)
+	tx.Exec(s)
 
 	if noChanges {
 		d.log.Printf("Database version is now %d (no schema changes)", version)
