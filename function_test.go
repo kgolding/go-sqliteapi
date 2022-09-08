@@ -19,8 +19,11 @@ functions:
       text:
         notnull: true
         min: 2
+      dummy:
     statements:
-      - INSERT INTO table1 (text) VALUES ($1)
+      - INSERT INTO table1 (text) VALUES ($text  || " 1" || $dummy)
+      - INSERT INTO table1 (text) VALUES ($text  || " 2")
+      - INSERT INTO table1 (text) VALUES ($text  || " 3")
 `
 
 	db, err := NewDatabase("file::memory:?cache=shared",
@@ -39,17 +42,25 @@ functions:
 	c := db.config
 
 	assert.Equal(t, 1, len(c.Functions))
-	assert.Equal(t, 1, len(c.Functions[0].Params))
+	assert.Equal(t, 2, len(c.Functions[0].Params))
 	assert.Equal(t, "func1", c.Functions[0].Name)
 	assert.Equal(t, "text", c.Functions[0].Params[0].Name)
 	assert.Equal(t, true, c.Functions[0].Params[0].Notnull)
 	assert.Equal(t, int64(2), c.Functions[0].Params[0].Min)
 
-	assert.Equal(t, 1, len(c.Functions[0].Statements))
+	assert.Equal(t, 3, len(c.Functions[0].Statements))
 
-	assert.NoError(t, db.CallFunction("func1", map[string]interface{}{"text": "Hello world"}, nil))
+	assert.NoError(t, db.CallFunction("func1", map[string]interface{}{"text": "Hello world", "dummy": ""}, nil))
 
 	m, err := db.GetMap("table1", 1, false)
 	assert.NoError(t, err)
-	assert.Equal(t, "Hello world", m["text"])
+	assert.Equal(t, "Hello world 1", m["text"])
+
+	m, err = db.GetMap("table1", 2, false)
+	assert.NoError(t, err)
+	assert.Equal(t, "Hello world 2", m["text"])
+
+	m, err = db.GetMap("table1", 3, false)
+	assert.NoError(t, err)
+	assert.Equal(t, "Hello world 3", m["text"])
 }

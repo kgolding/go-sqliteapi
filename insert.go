@@ -131,7 +131,7 @@ func (d *Database) insertMapWithTx(tx *sqlx.Tx, table string, data map[string]in
 				if t := d.config.GetTable(strings.TrimSuffix(k, RefTableSuffix)); t != nil {
 					// logf("got join table %s", t.Name)
 					for _, f := range t.Fields {
-						logf("link table %s, checking field %s: %s vs %s.", t.Name, f.Name, f.References, table)
+						//logf("link table %s, checking field %s: %s vs %s.", t.Name, f.Name, f.References, table)
 						if strings.HasPrefix(f.References, table+".") { // Target table has a ref to the main table
 							ref, err := NewReference(f.References)
 							if err != nil {
@@ -141,6 +141,7 @@ func (d *Database) insertMapWithTx(tx *sqlx.Tx, table string, data map[string]in
 							// logf("link table %s.%s: %s", t.Name, f.Name, ref)
 
 							// Clear out existing records
+							// @todo we should keep existing records rather than deleting all
 							tx.Exec("DELETE FROM `"+t.Name+"` WHERE `"+ref.KeyField+`" = ?`, data[ref.KeyField])
 
 							sdata, err := interfaceToArrayMapStringInterface(data[k])

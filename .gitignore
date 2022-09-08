@@ -1,4 +1,3 @@
-/test23
-/database.backup.db
-/example/test.db
 /example/example
+*.db
+.idea

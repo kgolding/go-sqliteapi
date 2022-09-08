@@ -39,6 +39,7 @@ type Config struct {
 	Tables    []ConfigTable    `yaml:"tables,omitempty"`
 	Triggers  []ConfigTrigger  `yaml:"triggers,omitempty"`
 	Functions []ConfigFunction `yaml:"functions,omitempty"`
+	Views     []ConfigView     `yaml:"views,omitempty"`
 }
 
 type ConfigTable struct {
@@ -50,6 +51,7 @@ type ConfigTrigger struct {
 	Name      string `yaml:"name"`
 	Event     string `yaml:"event"` // DELETE, INSERT, UPDATE
 	Table     string `yaml:"table"`
+	When      string `yaml:"when"`
 	Statement string `yaml:"statement"`
 }
 
@@ -57,6 +59,11 @@ type ConfigFunction struct {
 	Name       string                `yaml:"name"`
 	Params     []ConfigFunctionParam `yaml:"params"`
 	Statements []string              `yaml:"statements"`
+}
+
+type ConfigView struct {
+	Name      string `yaml:"name"`
+	Statement string `yaml:"statement"`
 }
 
 type ConfigFunctionParam struct {
@@ -118,6 +125,9 @@ type ConfigField struct {
 	PrimaryKey int         `yaml:"pk" json:"-"`
 	Unique     bool        `yaml:"unique" json:"unique,omitempty"`
 
+	// Indirectly database related
+	Indexed bool `yaml:"indexed" json:"indexed,omitempty"`
+
 	// UI
 	Label    string `yaml:"label" json:"label,omitempty"`
 	Hidden   bool   `yaml:"hidden" json:"hidden,omitempty"`
@@ -137,14 +147,16 @@ type ConfigField struct {
 
 func (c *Config) String() string {
 	s := "Config:\n"
+	dashes := strings.Repeat("-", 80) + "\n"
 
 	for _, t := range c.Tables {
+		s += dashes
 		q, err := t.CreateSQL()
 		if err != nil {
 			q = "Error: " + err.Error()
 		}
 
-		s += fmt.Sprintf("\nTable: `%s`\n", t.Name)
+		s += fmt.Sprintf("Table: %s\n", t.Name)
 
 		a := make([][]string, 0)
 		a = append(a, []string{
@@ -157,6 +169,7 @@ func (c *Config) String() string {
 			"Hidden",
 			"Min",
 			"Max",
+			"Indexed",
 			"References",
 			"Default",
 		})
@@ -179,20 +192,23 @@ func (c *Config) String() string {
 				hidden,
 				fmt.Sprintf("%d", f.Min),
 				fmt.Sprintf("%d", f.Max),
+				fmt.Sprintf("%t", f.Indexed),
 				f.References,
 				fmt.Sprintf("%v", f.Default),
 			})
 		}
-		s += tabular(a)
+		s += tabular(a) + "\n"
 		s += q + "\n"
 	}
 
 	for _, t := range c.Triggers {
-		s += fmt.Sprintf("\nTrigger %s\n", t.CreateSQL())
+		s += dashes
+		s += fmt.Sprintf("Trigger %s\n\n", t.CreateSQL())
 	}
 
 	for _, f := range c.Functions {
-		s += fmt.Sprintf("\nFunction %s\n\tParams: ", f.Name)
+		s += dashes
+		s += fmt.Sprintf("Function %s\n\tParams: ", f.Name)
 		for i, p := range f.Params {
 			if i > 0 {
 				s += ", "
@@ -202,6 +218,7 @@ func (c *Config) String() string {
 		for _, x := range f.Statements {
 			s += "\n\t- " + x
 		}
+		s += "\n"
 	}
 
 	return s
@@ -241,7 +258,11 @@ func (trigger *ConfigTrigger) CreateSQL() string {
 
 	sql := "CREATE TRIGGER " + trigger.Name + "\n"
 	sql += trigger.Event + " ON " + trigger.Table + "\n"
-	sql += "FOR EACH ROW BEGIN\n"
+	sql += "FOR EACH ROW" // Optional, same as the default behaviour
+	if trigger.When != "" {
+		sql += " WHEN " + trigger.When
+	}
+	sql += "\nBEGIN\n"
 	sql += "\t" + statement + "\n"
 	sql += "END;"
 
@@ -366,17 +387,19 @@ func (c *Config) GetTable(name string) *ConfigTable {
 
 func (c *Config) GetBackReferences(name string) []*BackReference {
 	ret := make([]*BackReference, 0)
-	for _, table := range c.Tables {
-		if table.Name != name {
-			for _, f := range table.Fields {
-				if f.References != "" {
-					ref, err := NewReference(f.References)
-					if err == nil && ref.Table == name {
-						ret = append(ret, &BackReference{
-							Reference:   *ref,
-							SourceTable: table.Name,
-							SourceField: f.Name,
-						})
+	if c != nil {
+		for _, table := range c.Tables {
+			if table.Name != name {
+				for _, f := range table.Fields {
+					if f.References != "" {
+						ref, err := NewReference(f.References)
+						if err == nil && ref.Table == name {
+							ret = append(ret, &BackReference{
+								Reference:   *ref,
+								SourceTable: table.Name,
+								SourceField: f.Name,
+							})
+						}
 					}
 				}
 			}
@@ -397,6 +420,7 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 		Tables    map[string]yaml.MapSlice
 		Triggers  map[string]yaml.MapSlice
 		Functions map[string]yaml.MapSlice
+		Views     map[string]string
 	}
 	err := yaml.Unmarshal(b, &c)
 	if err != nil {
@@ -467,6 +491,8 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 						f.PrimaryKey = i
 					case "unique":
 						f.Unique = tf
+					case "indexed":
+						f.Indexed = tf
 					case "label":
 						f.Label = s
 					case "hidden":
@@ -524,6 +550,8 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 					trigger.Event = s // No ToUpper as might have a field name in it e.g. "INSERT ON fieldName"
 				case "table":
 					trigger.Table = s
+				case "when":
+					trigger.When = s
 				case "statement":
 					trigger.Statement = s
 				default:
@@ -604,6 +632,14 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 		})
 		cfg.Functions = append(cfg.Functions, function)
 	}
+	// VIEWS
+	for viewName, viewStatement := range c.Views {
+		view := ConfigView{
+			Name:      viewName,
+			Statement: viewStatement,
+		}
+		cfg.Views = append(cfg.Views, view)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -614,6 +650,10 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 
 	sort.Slice(cfg.Triggers, func(a, b int) bool {
 		return cfg.Triggers[a].Name < cfg.Tables[b].Name
+	})
+
+	sort.Slice(cfg.Views, func(a, b int) bool {
+		return cfg.Views[a].Name < cfg.Views[b].Name
 	})
 
 	// println("=========================================================")

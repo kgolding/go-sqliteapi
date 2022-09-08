@@ -255,7 +255,7 @@ func processFields_JSON(m map[string]interface{}) {
 // AddRefLabels adds *_RefLabel select fields and joins for all existing select fields that have
 // a reference (with a label field)
 func (d *Database) AddRefLabels(sb *SelectBuilder, exclTable string) {
-	d.debugLog.Printf("AddRefLabels: sb: %#v\n", sb)
+	// d.debugLog.Printf("AddRefLabels: sb: %#v\n", sb)
 	if ct := d.config.GetTable(sb.From); ct != nil {
 		if len(sb.Select) == 0 {
 			for _, f := range ct.Fields {
@@ -264,7 +264,7 @@ func (d *Database) AddRefLabels(sb *SelectBuilder, exclTable string) {
 		}
 		// d.debugLog.Printf("AddRefLabels: ct.Fields: %#v\n", ct.Fields)
 		for _, selectField := range sb.Select {
-			d.debugLog.Printf("AddRefLabels: selectField: %#v\n", selectField)
+			// d.debugLog.Printf("AddRefLabels: selectField: %#v\n", selectField)
 			// table, field := tableFieldUnWrapped(selectField)
 			for _, f := range ct.Fields {
 				// fmt.Printf("A. AddRefLabels: selectField: %s, f.Name: %s, f.Ref: %s\n", selectField, f.Name, f.References)

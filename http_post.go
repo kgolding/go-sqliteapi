@@ -32,7 +32,7 @@ func (d *Database) HandlePostTable(w http.ResponseWriter, r *http.Request) {
 	id, err := d.InsertMap(table, data, user)
 	if err != nil {
 		d.log.Printf("%s: Error creating row: %v", table, err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, d.humaniseSqlError(err), http.StatusBadRequest)
 		return
 	}
 
@@ -79,7 +79,7 @@ func (d *Database) HandlePostSQL(w http.ResponseWriter, r *http.Request) {
 	err = d.QueryJsonWriter(w, data.SQL, data.Args)
 	if err != nil {
 		d.log.Printf("Error executing SQL: %v", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, d.humaniseSqlError(err), http.StatusBadRequest)
 		return
 	}
 }

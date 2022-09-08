@@ -54,7 +54,7 @@ tables:
 	assert.Equal(t, http.StatusBadRequest, res.StatusCode)
 	b, err := io.ReadAll(res.Body)
 	res.Body.Close()
-	assert.Equal(t, "UNIQUE constraint failed: table1.oid\n", string(b))
+	assert.Equal(t, "table1.oid is already used and this field must be unique\n", string(b))
 
 	// Post SQL and check result
 	tsSqlPost := httptest.NewServer(db.Handler(""))

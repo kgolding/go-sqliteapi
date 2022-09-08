@@ -150,8 +150,8 @@ tables:
       ref: table1.oid/text
 `
 	db, err := NewDatabase("file::memory:?cache=shared",
-		YamlConfig([]byte(yaml)),
-		Log(log.Default()))
+		// Log(log.Default()),
+		YamlConfig([]byte(yaml)))
 	assert.NoError(t, err)
 	defer db.Close()
 
@@ -226,9 +226,9 @@ tables:
       ref: t2.id/title2
 `
 	db, err := NewDatabase("file::memory:?cache=shared",
-		YamlConfig([]byte(yaml)),
-		Log(log.Default()),
+		// Log(log.Default()),
 		// DebugLog(log.Default()),
+		YamlConfig([]byte(yaml)),
 	)
 	assert.NoError(t, err)
 	defer db.Close()

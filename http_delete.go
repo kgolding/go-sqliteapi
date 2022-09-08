@@ -13,24 +13,16 @@ func (d *Database) HandleDelRow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tableInfo := d.dbInfo.GetTableInfo(table)
-	if tableInfo == nil {
-		http.Error(w, "unknown table/view", http.StatusBadRequest)
-		return
-	}
-
 	key := path.Base(r.URL.Path)
 
 	// user := auth.GetUser(r)
-	var user User // BLANK USER
 
-	err := d.Delete(table, key, user)
+	err := d.Delete(table, key, nil)
 	if err != nil {
 		if errors.Is(err, ErrUnknownKey) {
-			http.Error(w, err.Error(), http.StatusNotFound)
-		} else {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, d.humaniseSqlError(err), http.StatusNotFound)
+			return
 		}
-		return
+		http.Error(w, d.humaniseSqlError(err), http.StatusBadRequest)
 	}
 }

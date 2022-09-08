@@ -118,10 +118,12 @@ triggers:
   triggerTable1Insert:
     table: table1
     event: after insert
+    when: true
     statement: INSERT INTO history (table1Id, text) VALUES (new.id, new.text)
   triggerTable1Update:
     table: table1
-    event: update of text
+    event: after update of text
+    when: new.text != old.text || "dummy"
     statement: INSERT INTO history (table1Id, text) VALUES (new.id, new.text)
 `)
 
@@ -132,6 +134,8 @@ triggers:
 	)
 	assert.NoError(t, err)
 	defer db.Close()
+
+	assert.Equal(t, "new.text != old.text || \"dummy\"", db.config.Triggers[1].When)
 
 	var i int
 	assert.NoError(t, db.DB.Get(&i, "SELECT COUNT(*) FROM history"))
@@ -150,13 +154,14 @@ triggers:
 	assert.Equal(t, 1, i)
 
 	// Reapply config expect no version change
-	assert.NoError(t, db.DB.Get(&i, "PRAGMA user_version"))
+	var version int
+	assert.NoError(t, db.DB.Get(&version, "PRAGMA user_version"))
 	cfg2, err := NewConfigFromYaml(yaml)
 	assert.NoError(t, err)
 	assert.NoError(t, db.ApplyConfig(cfg2, nil))
 	var newVersion int
 	assert.NoError(t, db.DB.Get(&newVersion, "PRAGMA user_version"))
-	assert.Equal(t, i, newVersion)
+	assert.Equal(t, version, newVersion)
 
 	yaml2, err := NewConfigFromYaml(
 		[]byte(strings.Replace(string(yaml), "event: update of text", "event: UPDATE", 1)))
@@ -176,6 +181,11 @@ triggers:
 
 func TestConfigApplyYamlMultipleTimes(t *testing.T) {
 	cfg := []byte(`
+triggers:
+  trigger1:
+    table: table1
+    event: AFTER INSERT
+    statement: UPDATE table2 SET title = title WHERE id=999999999
 tables:
   table1:
     id:
@@ -197,7 +207,7 @@ tables:
 	defer os.Remove("temp.db")
 
 	expectId := 1
-	for i := 1; i < 10; i++ {
+	for i := 1; i < 4; i++ {
 		if i == 2 {
 			cfg = append(cfg, []byte("      unique: true")...)
 			expectId++

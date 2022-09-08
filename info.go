@@ -24,6 +24,9 @@ type TableFieldInfo struct {
 }
 
 func (tis TableInfos) GetTableInfo(name string) *TableInfo {
+	if name == "" {
+		return nil
+	}
 	for _, tfi := range tis {
 		if tfi.Name == name {
 			return &tfi

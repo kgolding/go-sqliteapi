@@ -36,15 +36,20 @@ func main() {
 	db, err := sqliteapi.NewDatabase("test.db",
 		sqliteapi.YamlConfig([]byte(cfg)),
 		sqliteapi.Log(log.Default()),
-		// sqliteapi.DebugLog(log.Default()),
+		sqliteapi.DebugLog(log.Default()),
 	)
 	if err != nil {
 		panic(err)
 	}
 	defer db.Close()
 
+	_, err = db.InsertMap("status", map[string]interface{}{"name": "Status 1"}, nil)
+	if err != nil {
+		log.Print(err.Error())
+	}
+
 	// Insert a sample invoice every time we run
-	db.InsertMap("invoice", map[string]interface{}{
+	_, err = db.InsertMap("invoice", map[string]interface{}{
 		"customer": "Fred Blogs",
 		"invoiceItem_RefTable": []map[string]interface{}{
 			{

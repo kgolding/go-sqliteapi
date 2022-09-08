@@ -39,7 +39,7 @@ func (d *Database) HandlePutRow(w http.ResponseWriter, r *http.Request) {
 	err = d.UpdateMap(table, data, user)
 	if err != nil {
 		d.log.Printf("%s: Error updating row where %s = '%v': %v", table, tableInfo.GetPrimaryKey().Field, key, err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, d.humaniseSqlError(err), http.StatusBadRequest)
 		return
 	}
 
