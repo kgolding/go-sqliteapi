@@ -77,4 +77,35 @@ tables:
 	assert.Equal(t, int64(500), items1[0]["qty"])
 	assert.Equal(t, "Item C", items1[0]["item"])
 	assert.Equal(t, 39.95, items1[0]["cost"])
+
+	// Test the field validation
+
+	badItem := map[string]interface{}{
+		"invoiceId": 1,
+		"qty":       "notaqty", // String instead of integer
+	}
+	_, err = db.InsertMap("invoiceItem", badItem, nil)
+	assert.ErrorContains(t, err, "qty:")
+
+	badItem = map[string]interface{}{
+		"invoiceId": 1,
+		"item":      9999, // Integer instead of string
+	}
+	_, err = db.InsertMap("invoiceItem", badItem, nil)
+	assert.NoError(t, err)
+
+	badItem = map[string]interface{}{
+		"invoiceId": 1,
+		"item":      9999.99, // Float instead of string
+	}
+	_, err = db.InsertMap("invoiceItem", badItem, nil)
+	assert.NoError(t, err)
+
+	badItem = map[string]interface{}{
+		"invoiceId": 1,
+		"cost":      "XX", // String instead of number
+	}
+	_, err = db.InsertMap("invoiceItem", badItem, nil)
+	assert.Error(t, err)
+
 }

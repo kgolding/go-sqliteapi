@@ -139,8 +139,8 @@ type ConfigField struct {
 	// Options   []*SelectOption `json:"options,omitempty"`
 
 	// Validation
-	Min    int            `yaml:"min" json:"min,omitempty"`
-	Max    int            `yaml:"max" json:"max,omitempty"`
+	Min    int64          `yaml:"min" json:"min,omitempty"`
+	Max    int64          `yaml:"max" json:"max,omitempty"`
 	Regex  string         `yaml:"regex" json:"regex,omitempty"`
 	regexp *regexp.Regexp `yaml:"-" json:"-"`
 }
@@ -453,7 +453,7 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 					}
 					var s string
 					var tf bool
-					var i int
+					var i int64
 					switch x := y.Value.(type) {
 					case string:
 						s = x
@@ -465,9 +465,9 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 							i = 1
 						}
 					case int:
-						i = x
+						i = int64(x)
 					case int64:
-						i = int(x)
+						i = x
 					case nil:
 						return nil, fmt.Errorf("%s.%s: field param missing", tableName, f.Name)
 					default:
@@ -476,7 +476,7 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 					// slower := strings.ToLower(s)
 					// tf = slower == "1" || slower == "on" || slower == "yes" || slower == "true"
 					if i == 0 {
-						i, _ = strconv.Atoi(s)
+						i, _ = strconv.ParseInt(s, 10, 64)
 					}
 					switch name {
 					case "type":
@@ -488,7 +488,7 @@ func NewConfigFromYaml(b []byte) (*Config, error) {
 					case "ref":
 						f.References = s
 					case "pk":
-						f.PrimaryKey = i
+						f.PrimaryKey = int(i)
 					case "unique":
 						f.Unique = tf
 					case "indexed":

@@ -2,6 +2,8 @@ package sqliteapi
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 )
 
 const (
@@ -32,6 +34,10 @@ func (d *Database) FieldValidation(table string, field string, value interface{}
 		checkagain:
 			switch v := value.(type) {
 			case int:
+				value = int64(v)
+				goto checkagain
+
+			case int64:
 				if tf.Min > 0 && v <= tf.Min {
 					return fmt.Errorf("%s: value must be greater or equal to %d", field, tf.Min)
 				}
@@ -48,13 +54,31 @@ func (d *Database) FieldValidation(table string, field string, value interface{}
 				}
 
 			case string:
+				switch strings.ToLower(tf.Type) {
+				case "integer":
+					n, err := strconv.ParseInt(v, 10, 64)
+					if err != nil {
+						return fmt.Errorf("%s: expected whole number", field)
+					}
+					value = n
+					goto checkagain
+
+				case "real", "number":
+					n, err := strconv.ParseFloat(v, 64)
+					if err != nil {
+						return fmt.Errorf("%s: expected a number", field)
+					}
+					value = n
+					goto checkagain
+				}
+
 				if v == "" && tf.NotNull {
 					return fmt.Errorf("%s: missing value", field)
 				}
-				if tf.Min > 0 && len(v) < tf.Min {
+				if tf.Min > 0 && int64(len(v)) < tf.Min {
 					return fmt.Errorf("%s: too short, must be at least %d chars", field, tf.Min)
 				}
-				if tf.Max > 0 && len(v) > tf.Max {
+				if tf.Max > 0 && int64(len(v)) > tf.Max {
 					return fmt.Errorf("%s: too long, must be no more than %d chars", field, tf.Max)
 				}
 				if tf.regexp != nil && v != "" && !tf.regexp.MatchString(v) {
@@ -63,12 +87,13 @@ func (d *Database) FieldValidation(table string, field string, value interface{}
 					// }
 					return fmt.Errorf("%s: invalid format in value '%s'", field, v)
 				}
+
 			default:
 				// Convert to string and check it again
 				if value == nil {
 					value = ""
 				} else {
-					fmt.Sprintf("FieldValidate: Convert to string ftom %T\n", value)
+					//fmt.Sprintf("FieldValidate: Convert to string from %T\n", value)
 					value = fmt.Sprintf("%v", value)
 				}
 				goto checkagain

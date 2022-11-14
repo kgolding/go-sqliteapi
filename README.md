@@ -61,6 +61,7 @@ Fields can have the following attributes:
 * `pk` if true this field will be the primary key
 * `notnull` if true this field cannot be null
 * `unique` if true this field will have a unique index
+* `indexed` if true this field will be indexed
 * `default` the SQLite default value
 * `ref` Foreign key/reference in the format `tableName`.`keyField`/`labelField`. e.g. `tableA.id/text`
   * `labelField` is one or more comma seperated fields from the referenced table that will be returned using an automatic join as a new field with the `keyField` name and a `_RefLabel` suffix e.g. `keyField_RefLabel`. Multiple labelField's will be separated with a `|`
@@ -96,6 +97,37 @@ Fields can have the following attributes:
   set to the timestamp of creation.
 
 Additional special fields can be added via the exported `SpecialFields` map
+
+## Triggers
+
+Define SQLite triggers to run statements automatically.
+
+````
+  triggers:
+    triggerTable1Update:
+      table: table1
+      event: after update of text
+      when: new.text != old.text || "dummy"
+      statement: INSERT INTO history (table1Id, text) VALUES (new.id, new.text)
+````
+
+## Functions
+
+Functions are akin to a stored procedure, where one or more SQL statements can be run within a database transaction
+(i.e. all statements must succeed else all are rolled back). Functions are call directly or via an API endpoint.
+
+Example function:
+
+````
+functions:
+  PayInvoiceInFull:
+    params:
+      invoiceId:
+        notnull: true
+        min: 1
+    statements:
+      - UPDATE invoice SET paid=true WHERE invoiceId=$invoiceId 
+````
 
 ## Migrations
 
